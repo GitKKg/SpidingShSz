@@ -51,5 +51,8 @@ import qualified Data.Text as T
 import qualified Data.Text.ICU.Convert as ICU  -- text-icu   ,proxychains stack install text-icu
 import qualified Data.Text.ICU as ICU
 
+import DataBase
+
 someFunc :: IO ()
 someFunc = putStrLn "someFunc"
+
