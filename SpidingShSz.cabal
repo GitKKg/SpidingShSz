@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 56a364341e441d373fa9edbc4086d1b1c312632d9e799825eaa2ee22e55f7e10
+-- hash: b2dd6b2d072b91f50df845160c099df96da95dea9d8ee5a88ece792a9f874e32
 
 name:           SpidingShSz
 version:        0.1.0.0
@@ -26,16 +26,16 @@ source-repository head
 
 library
   exposed-modules:
-      Lib
+      SpidePrice
   other-modules:
       Paths_SpidingShSz
   hs-source-dirs:
-      src
+      module
   build-depends:
       base >=4.7 && <5
   default-language: Haskell2010
 
-executable SpidingShSz-exe
+executable SpidingShSz
   main-is: Main.hs
   other-modules:
       Paths_SpidingShSz
