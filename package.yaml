@@ -35,6 +35,21 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - SpidingShSz
+    - text
+    - scalpel
+    - http-client
+    - bytestring
+    - tagsoup
+    - connection
+    - network
+    - http-client-tls
+    - http-types
+    - case-insensitive
+    - selda
+    - selda-sqlite
+    - regex-base
+    - regex-posix
+    - text-icu
 
 tests:
   SpidingShSz-test:
