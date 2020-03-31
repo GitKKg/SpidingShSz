@@ -35,13 +35,13 @@ data Stock = Stock  -- the field member name must be exact same with field of ta
   } deriving (Generic) -- not deriving Show, for default show not show utf8 Chinese correcttly
 
 instance SqlRow Stock
-   
 
 instance Show Stock where
   show stock = "Stock" ++ " {"++
     "\n_code =" ++ (unpack . _code $ stock) ++
-    ",\n_date =" ++ (show._date $ stock) ++
-    ",\n_name =" ++ (unpack . _name $ stock) ++
+    ",\n_date =" ++ (show . _date $ stock) ++
+    -- must use unpack, using show can't show Chinese 
+    ",\n_name =" ++ (unpack . _name $ stock) ++ 
     ",\n_open =" ++ (show . (/ 1000) . (fromIntegral :: Int -> Float). _open $ stock) ++
     ",\n_high =" ++ (show . (/ 1000) . (fromIntegral :: Int -> Float). _high $ stock) ++
     ",\n_close =" ++ (show . (/ 1000) . (fromIntegral :: Int -> Float). _close $ stock) ++

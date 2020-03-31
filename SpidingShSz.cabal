@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 26f735fab665a16b3139c415d8a10a80412ffc57309e3274d852414d836f94cf
+-- hash: 8f69c82970da21137b142377477d9e07da725c3073b810ad92906673a31bbea2
 
 name:           SpidingShSz
 version:        0.1.0.0
@@ -26,6 +26,7 @@ source-repository head
 
 library
   exposed-modules:
+      DataBase
       SpidePrice
   other-modules:
       Paths_SpidingShSz
