@@ -76,47 +76,49 @@ data1OrData2 = makeRegex ("^$|dbrow" :: String) :: Regex -- must specify type no
 onePageData :: IO () --(Maybe [Stock])
 onePageData = do
   systemManager <- newManager tlsManagerSettings
-  request163NoHead <- parseRequest $ stock163URL "600000" 2020 01 
+  request163NoHead <- parseRequest $ stock163URL "000001" 2020 01 
   response163NoHead <- httpLbs request163NoHead systemManager
   traverse print . fromJust $ scrapeStringLike (responseBody response163NoHead)  stockScraper
   return ()
   where
-    stockScraper = do
-      name <- getName
+    stockScraper = 
       -- must use decodeUtf8 making Text show Chinese correcttly ,accompany with unpack in show instance
-      fmap (\day -> day {_name = decodeUtf8 . L8.toStrict $  name}) <$> onePageData where
-      getName = text stockName ::Scraper L8.ByteString L8.ByteString
-      onePageData = chroots (stockTab // "tr" @: [AttributeString "class" @=~ data1OrData2] `atDepth` 1)  oneDayScraper where
-        oneDayScraper :: Scraper L8.ByteString Stock
-        oneDayScraper  = do
-          --name <- text stockName
-          inSerial $ do
-            --date <-  (pack . L8.unpack) <$> (seekNext $ text "td")
-            date <-  (read :: String -> Int) . dateToNum . L8.unpack  <$> (seekNext $ text "td")
-            open <- floorFloatToInt . (read :: String -> Float) .removeComma . L8.unpack <$> (seekNext $ text "td") 
-            high <- floorFloatToInt . (read :: String -> Float) .removeComma . L8.unpack <$> (seekNext $ text "td")
-            low <-  floorFloatToInt . (read :: String -> Float) .removeComma . L8.unpack <$> (seekNext $ text "td")
-            close <- floorFloatToInt . (read :: String -> Float) .removeComma . L8.unpack <$> (seekNext $ text "td")
-            _ <- seekNext $ text "td"
-            _ <- seekNext $ text "td"
-            -- read with float in case getting weird non-integer numeber,not likely,but heard ever
-            shares <- (floor :: Float -> Int) . (read :: String -> Float) .removeComma . L8.unpack <$> (seekNext $ text "td") -- in 100, one hand stock
-            value <- (floor :: Float -> Int) . (read :: String -> Float) .removeComma . L8.unpack <$> (seekNext $ text "td") -- in 10 thousnad RMB Yuan
-            return $ defaultStock {
-              _date = date,
-              _shares = shares,
-              _open = open,
-              _high = high,
-              _close = close,
-              _low = low,
-              _value = value
-              --,_name =  name
-                                  } where
-              floorFloatToInt = (floor :: Float -> Int) . (1000 *) 
-              dateToNum :: String -> String
-              dateToNum = unpack . mconcat . splitOn (pack "-") . pack  -- 2020-01-01 to 20200101
-              removeComma :: String -> String -- in case we get 120,500.56 such great number
-              removeComma = unpack . mconcat . splitOn (pack ",") . pack
+      --fmap (\day -> day {_name = decodeUtf8 . L8.toStrict $  name}) <$> onePageData
+      getName >>= onePageData  where
+        getName = text stockName ::Scraper L8.ByteString L8.ByteString
+        onePageData  = chroots (stockTab // "tr" @: [AttributeString "class" @=~ data1OrData2] `atDepth` 1)  . oneDayScraper  where
+          oneDayScraper :: L8.ByteString -> Scraper L8.ByteString Stock
+          oneDayScraper name  = do
+            --name <- text stockName
+            inSerial $ do
+              --date <-  (pack . L8.unpack) <$> (seekNext $ text "td")
+              date <-  (read :: String -> Int) . dateToNum . L8.unpack  <$> (seekNext $ text "td")
+              open <- floorFloatToInt . (read :: String -> Float) .removeComma . L8.unpack <$> (seekNext $ text "td") 
+              high <- floorFloatToInt . (read :: String -> Float) .removeComma . L8.unpack <$> (seekNext $ text "td")
+              low <-  floorFloatToInt . (read :: String -> Float) .removeComma . L8.unpack <$> (seekNext $ text "td")
+              close <- floorFloatToInt . (read :: String -> Float) .removeComma . L8.unpack <$> (seekNext $ text "td")
+              _ <- seekNext $ text "td"
+              _ <- seekNext $ text "td"
+              -- read with float in case getting weird non-integer numeber,not likely,but heard ever
+              shares <- (floor :: Float -> Int) . (read :: String -> Float) .removeComma . L8.unpack <$> (seekNext $ text "td") -- in 100, one hand stock
+              value <- (floor :: Float -> Int) . (read :: String -> Float) .removeComma . L8.unpack <$> (seekNext $ text "td") -- in 10 thousnad RMB Yuan
+              return $ defaultStock {
+                _date = date,
+                _shares = shares,
+                _open = open,
+                _high = high,
+                _close = close,
+                _low = low,
+                _value = value,
+                -- must use decodeUtf8 making Text show Chinese correcttly ,accompany with unpack in show instance
+                -- another way to write name inside,suitble for scenario where some fields depend each other 
+                _name = decodeUtf8 . L8.toStrict $ name
+                                    } where
+                floorFloatToInt = (floor :: Float -> Int) . (1000 *) 
+                dateToNum :: String -> String
+                dateToNum = unpack . mconcat . splitOn (pack "-") . pack  -- 2020-01-01 to 20200101
+                removeComma :: String -> String -- in case we get 120,500.56 such great number
+                removeComma = unpack . mconcat . splitOn (pack ",") . pack
   
 
 --printAllStock :: IO ()
