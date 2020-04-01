@@ -2,6 +2,7 @@
 
 module SpidePrice
     ( someFunc,
+      printStockName,
       stock163URL,
       onePageData
     ) where
@@ -73,14 +74,15 @@ stockTab =  "div" @: [hasClass "inner_box"] // "table" @:[AttributeString "class
 -- honestly, regexLike relevant doc is pile of shit
 data1OrData2 = makeRegex ("^$|dbrow" :: String) :: Regex -- must specify type notation "String" or else complier will complain
 
-onePageData :: IO () --(Maybe [Stock])
-onePageData = do
+onePageData :: String -> Int -> Int -> IO () --"000001" 2020 01
+onePageData stockCode year season = do
   systemManager <- newManager tlsManagerSettings
-  request163NoHead <- parseRequest $ stock163URL "000001" 2020 01 
+  request163NoHead <- parseRequest $ stock163URL stockCode year season
   response163NoHead <- httpLbs request163NoHead systemManager
   traverse print . fromJust $ scrapeStringLike (responseBody response163NoHead)  stockScraper
   return ()
   where
+    stockScraper :: Scraper L8.ByteString [Stock]
     stockScraper = 
       -- must use decodeUtf8 making Text show Chinese correcttly ,accompany with unpack in show instance
       --fmap (\day -> day {_name = decodeUtf8 . L8.toStrict $  name}) <$> onePageData
@@ -112,7 +114,7 @@ onePageData = do
                 _value = value,
                 -- must use decodeUtf8 making Text show Chinese correcttly ,accompany with unpack in show instance
                 -- another way to write name inside,suitble for scenario where some fields depend each other 
-                _name = decodeUtf8 . L8.toStrict $ name
+                _name = ( ( $ pack ")") . append ) .  (Prelude.head)  $ split (\c -> c==')') . decodeUtf8 . L8.toStrict $ name
                                     } where
                 floorFloatToInt = (floor :: Float -> Int) . (1000 *) 
                 dateToNum :: String -> String
