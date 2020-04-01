@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings ,DuplicateRecordFields #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module SpidePrice
     ( someFunc,
@@ -47,12 +47,10 @@ import Data.Functor
 
 import Data.Text
 
-
 import qualified Data.Text.Encoding as T       -- text
 import qualified Data.Text.IO as T
 import qualified Data.Text as T
-import qualified Data.Text.ICU.Convert as ICU  -- text-icu   ,proxychains stack install text-icu
-import qualified Data.Text.ICU as ICU
+
 
 import DataBase
 
