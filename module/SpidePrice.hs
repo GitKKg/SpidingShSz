@@ -51,6 +51,7 @@ import qualified Data.Text.Encoding as T       -- text
 import qualified Data.Text.IO as T
 import qualified Data.Text as T
 
+import Debug.Trace
 
 import DataBase
 
@@ -93,6 +94,8 @@ onePageData stockCode year season = do
             inSerial $ do
               --date <-  (pack . L8.unpack) <$> (seekNext $ text "td")
               date <-  (read :: String -> Int) . dateToNum . L8.unpack  <$> (seekNext $ text "td")
+-- use trace to print debug info inside a monad which have no monadtrans and no exporting value structor 
+              trace ("date is " ++ show date) $ return date
               open <- floorFloatToInt . (read :: String -> Float) .removeComma . L8.unpack <$> (seekNext $ text "td") 
               high <- floorFloatToInt . (read :: String -> Float) .removeComma . L8.unpack <$> (seekNext $ text "td")
               low <-  floorFloatToInt . (read :: String -> Float) .removeComma . L8.unpack <$> (seekNext $ text "td")
