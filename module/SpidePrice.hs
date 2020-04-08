@@ -95,7 +95,10 @@ onePageData stockCode year season = do
               --date <-  (pack . L8.unpack) <$> (seekNext $ text "td")
               date <-  (read :: String -> Int) . dateToNum . L8.unpack  <$> (seekNext $ text "td")
 -- use trace to print debug info inside a monad which have no monadtrans and no exporting value structor 
-              trace ("date is " ++ show date) $ return date
+              -- trace ("date is " ++ show date) $ return date
+              -- traceM is more simple
+              traceM $ "date is " ++ show date
+              
               open <- floorFloatToInt . (read :: String -> Float) .removeComma . L8.unpack <$> (seekNext $ text "td") 
               high <- floorFloatToInt . (read :: String -> Float) .removeComma . L8.unpack <$> (seekNext $ text "td")
               low <-  floorFloatToInt . (read :: String -> Float) .removeComma . L8.unpack <$> (seekNext $ text "td")

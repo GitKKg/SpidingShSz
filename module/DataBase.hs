@@ -54,7 +54,7 @@ instance Show Stock where
     "\n}\n"
 defaultStock = Stock "600000" 20200101 "浦发银行" 0 0 0 0 0 0 0 0 0
 
-data RightDsInfo = RightDsInfo -- DS means dividend and sharesent
+data RightDsInfo = RightDsInfo -- DS means dividend and sharesent, 分红 表
   {
     _code :: Text,
     _name :: Text,
@@ -65,12 +65,27 @@ data RightDsInfo = RightDsInfo -- DS means dividend and sharesent
     _process :: Bool, -- True means already did,False means just in plan
     _exRightDateDS :: Int, -- 除权日
     _recordDateDS :: Int  -- 股权登记日
-  }
+  } deriving (Generic)
 
-data RightBdInfo = RightBdInfo -- Bd, buy shares of distrbution
+instance SqlRow RightDsInfo
+
+data RightBdInfo = RightBdInfo -- Bd, buy shares of distrbution,  配股 表
   {
-  _announeDateB :: Text, -- B means distrbution for Buying
-  _BORatio :: Double -- buy offering Ration , 配股比例 每10股可买股数
-  }
-  
-  
+    _code :: Text,
+    _name :: Text,
+    _announeDateB :: Text, -- B means distrbution for Buying
+    _BOfRatio :: Double, -- buy offering Ration , 配股比例 每10股可买股数
+    _offerPrice :: Double, -- 配股价格
+    _capStock :: Int, -- 基准股本
+    _exRightDateB :: Int, -- 除权日
+    _recordDateB :: Int -- 股权登记日
+  } deriving (Generic)
+
+instance SqlRow RightBdInfo
+
+data UpdateTime = UpdateTime
+  {
+    _time :: Int
+  } deriving (Generic)
+
+instance SqlRow UpdateTime
