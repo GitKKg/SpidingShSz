@@ -121,10 +121,18 @@ getData code = do
   where
     stockScraper :: Scraper L8.ByteString [RightInfo]
     stockScraper =
-      getName >>= onePageData where
+      (<|>) <$> (onePageDataB =<<)  <*> (onePageDataA =<<) $  getName  where
       getName = text stockName :: Scraper L8.ByteString L8.ByteString
-      onePageData = chroots  bonusRow  . oneDayScraper  where
+      onePageDataB :: L8.ByteString -> Scraper L8.ByteString [RightInfo]
+      onePageDataB = (fmap.fmap) Left . chroots  bonusRow  . oneDayScraper  where
+        oneDayScraper name = undefined
+      onePageDataA :: L8.ByteString -> Scraper L8.ByteString [RightInfo]
+      onePageDataA = (fmap . fmap) Right . chroots allotmentRow  . oneDayScraper  where
         oneDayScraper = undefined
+      -- getName >>= onePageData where
+      -- getName = text stockName :: Scraper L8.ByteString L8.ByteString
+      -- onePageData = chroots  bonusRow  . oneDayScraper  where
+      --   oneDayScraper = undefined
   
 -- some paralell mechanism in semantics of (->),ie. fucntion
 f = (+10)
