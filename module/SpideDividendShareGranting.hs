@@ -71,8 +71,8 @@ startDate = 2003 -- season 01
 stockName :: Selector
 stockName = "div" @: [hasClass "toolbartop",AttributeString "id" @= "toolbar"] // "div" @:[hasClass "tbtb01"] `atDepth` 1 // "h1" `atDepth` 1
 
-getNameFrSina :: IO ()
-getNameFrSina = do
+getFrSinaDemo :: IO ()
+getFrSinaDemo = do
   systemManager <- newManager tlsManagerSettings
   requestSinaNoHead <- parseRequest $ sinaURL "000002"
   responseSinaNoHead <- httpLbs requestSinaNoHead systemManager
@@ -84,13 +84,62 @@ getNameFrSina = do
   -- 万科A
   let gbkPage = L8.fromStrict . encodeUtf8 $ txt
   L8.putStrLn.fromJust $ scrapeStringLike gbkPage ( text stockName)
-  L8.putStrLn.fromJust $ scrapeStringLike gbkPage (attr "id" dividendTab) -- sharebonus_1
-  L8.putStrLn.fromJust $ scrapeStringLike gbkPage (html rowDividend)
-  traverse L8.putStrLn . fromJust $ scrapeStringLike  gbkPage (texts rowDividend)
+  L8.putStrLn.fromJust $ scrapeStringLike gbkPage (attr "id" bonusTab) -- sharebonus_1
+  L8.putStrLn.fromJust $ scrapeStringLike gbkPage (html bonusRow)
+  print "now show dividend table"
+  traverse L8.putStrLn . fromJust $ scrapeStringLike  gbkPage (texts bonusRow)
+  print "now show allotment table"
+  traverse L8.putStrLn . fromJust $ scrapeStringLike  gbkPage (texts allotmentRow)
   print "over"
 
-dividendTab :: Selector
-dividendTab = "table" @: [AttributeString "id" @= "sharebonus_1"] -- hasClass "table",note,page source has no table this class attribute,but f12 has
+bonusTab :: Selector
+bonusTab = "table" @: [AttributeString "id" @= "sharebonus_1"] -- hasClass "table",note,page source has  no table this class attribute,but f12 has
 
-rowDividend :: Selector
-rowDividend = dividendTab // "tbody" `atDepth` 1 // "tr" `atDepth` 1
+bonusRow :: Selector
+bonusRow = bonusTab // "tbody" `atDepth` 1 // "tr" `atDepth` 1
+
+allotmentTab :: Selector
+allotmentTab = "table" @: [AttributeString "id" @= "sharebonus_2"]
+
+allotmentRow :: Selector
+allotmentRow = allotmentTab // "tbody" `atDepth` 1 // "tr" `atDepth` 1
+
+getData :: String -> IO ()
+getData code = do
+  systemManager <- newManager tlsManagerSettings
+  requestSinaNoHead <- parseRequest $ sinaURL "000002"
+  responseSinaNoHead <- httpLbs requestSinaNoHead systemManager
+  putStrLn $ "The Bing status code was: " ++ (show $ statusCode $ responseStatus responseSinaNoHead)
+  gbk <- ICU.open "gbk" Nothing
+  let txt :: Text
+      txt = ICU.toUnicode gbk $ L8.toStrict $ responseBody responseSinaNoHead
+  -- T.putStrLn txt
+  -- 万科A
+  let gbkPage = L8.fromStrict . encodeUtf8 $ txt
+  traverse print . fromJust $ scrapeStringLike gbkPage stockScraper
+  return ()
+  where
+    stockScraper :: Scraper L8.ByteString [RightInfo]
+    stockScraper =
+      getName >>= onePageData where
+      getName = text stockName :: Scraper L8.ByteString L8.ByteString
+      onePageData = chroots  bonusRow  . oneDayScraper  where
+        oneDayScraper = undefined
+  
+-- some paralell mechanism in semantics of (->),ie. fucntion
+f = (+10)
+h = (+12)
+g = ($ 2)
+p = ($) <$> (f .)  <*> g $ h
+-- <$>,<*> are both infixl 4, so associated from left to right
+-- to function,<$> means pipe,ie.,apply another fucntion f on its output
+-- to function, f1 <*> f2 means ,f1 ,f2 's first parameters get same type,so apply f1' rest part(as function) on f2's rest part (as data)
+-- all below are just talked about type variation, but semantics under type limit is inherent,could not be infered from type clarfication
+-- so , in general ,12 as parameter,both applied by (+2) and (+3) ,and then two output results are applied by (,),this is a paralell semantics of function
+-- or ,we say this inherent feature must be implenmted by instance Functor and Applicative of  operator (->)
+tt = (,) <$> (+2) <*> (+3) $ 12
+ttt = (,,) <$> (+1) <*> (+2) <*> (+3) $ 12
+-- (12+1,12+2,12+3)
+addSame = (plus3) <$> (+1) <*> (($2). (-) ) <*> (*3) $ 8
+--(8+1) + (8-2) + (8*3) == 39
+plus3 = \x y z -> x+y+z

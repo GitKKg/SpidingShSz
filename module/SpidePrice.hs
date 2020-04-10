@@ -134,7 +134,7 @@ onePageData stockCode year season = do
 --     gbk <- ICU.open "gbk" Nothing
 --     let txt = ICU.toUnicode gbk $ L8.toStrict name
 --     return $ (\oneDay -> oneDay {_name =  txt}) <$> stockA
-    
+
 
 printStockName = T.putStrLn . ( ( $  pack ")") . append  ) .  (Prelude.head)  $ split (\c -> c==')') $ pack "浦发银行(600000) 历史交易数据"
 
