@@ -145,6 +145,13 @@ p = ($) <$> (f .)  <*> g $ h
 -- all below are just talked about type variation, but semantics under type limit is inherent,could not be infered from type clarfication
 -- so , in general ,12 as parameter,both applied by (+2) and (+3) ,and then two output results are applied by (,),this is a paralell semantics of function
 -- or ,we say this inherent feature must be implenmted by instance Functor and Applicative of  operator (->)
+-- ref to p815 of FirstPrinciples:
+-- instance Applicative ((->) r) where
+--   pure = const
+--   f <*> a = \r -> f r (a r) -- see, one r ,same r is applied twice, by f and a,different function
+-- according to instance implenmented above, could get inference below:
+-- g <$> f <*> a = \r -> (g . f) r (a r) ,or say , g <$> f <*> a = \r -> g (f r) (a r)
+
 tt = (,) <$> (+2) <*> (+3) $ 12
 ttt = (,,) <$> (+1) <*> (+2) <*> (+3) $ 12
 -- (12+1,12+2,12+3)
