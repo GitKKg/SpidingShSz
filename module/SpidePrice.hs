@@ -4,8 +4,11 @@ module SpidePrice
     ( someFunc,
       printStockName,
       stock163URL,
-      onePageData
-    ) where
+      onePageData,
+      pm,
+      mncal
+    )
+where
 
 import Text.HTML.Scalpel
 import Control.Applicative
@@ -55,6 +58,8 @@ import Debug.Trace
 
 import DataBase
 
+import Control.Monad
+import Data.Functor
 someFunc :: IO ()
 someFunc = putStrLn "someFunc"
 
@@ -85,11 +90,14 @@ onePageData stockCode year season = do
     stockScraper = 
       -- must use decodeUtf8 making Text show Chinese correcttly ,accompany with unpack in show instance
       --fmap (\day -> day {_name = decodeUtf8 . L8.toStrict $  name}) <$> onePageData
-      getName >>= onePageData  where
+      join $ onePageData <$> getName <*> return stockCode where
         getName = text stockName ::Scraper L8.ByteString L8.ByteString
-        onePageData  = chroots (stockTab // "tr" @: [AttributeString "class" @=~ data1OrData2] `atDepth` 1)  . oneDayScraper  where
-          oneDayScraper :: L8.ByteString -> Scraper L8.ByteString Stock
-          oneDayScraper name  = do
+        onePageData :: L8.ByteString  -> String -> Scraper L8.ByteString [Stock]
+        -- fmap . fmap here is compose function which get two parameters,here is oneDayScraper
+        -- (.) . (.) is ok too
+        onePageData  = (fmap . fmap) (chroots (stockTab // "tr" @: [AttributeString "class" @=~ data1OrData2] `atDepth` 1))  oneDayScraper  where
+          oneDayScraper :: L8.ByteString -> String -> Scraper L8.ByteString Stock
+          oneDayScraper name code  = do
             --name <- text stockName
             inSerial $ do
               --date <-  (pack . L8.unpack) <$> (seekNext $ text "td")
@@ -109,6 +117,7 @@ onePageData stockCode year season = do
               shares <- (floor :: Float -> Int) . (read :: String -> Float) .removeComma . L8.unpack <$> (seekNext $ text "td") -- in 100, one hand stock
               value <- (floor :: Float -> Int) . (read :: String -> Float) .removeComma . L8.unpack <$> (seekNext $ text "td") -- in 10 thousnad RMB Yuan
               return $ defaultStock {
+                _code = pack code,
                 _date = date,
                 _shares = shares,
                 _open = open,
@@ -139,3 +148,50 @@ onePageData stockCode year season = do
 printStockName = T.putStrLn . ( ( $  pack ")") . append  ) .  (Prelude.head)  $ split (\c -> c==')') $ pack "浦发银行(600000) 历史交易数据"
 
 printStockNameW2 = T.putStrLn . (  flip append  (pack ")") ) .  (Prelude.head)  $ split (\c -> c==')') $ pack "浦发银行(600000) 历史交易数据"
+
+
+-- some continuous passive voices example,used ever above:
+pa = ($ 1)
+pb = ($ 2)
+ps = pb . pa $ (-)  -- pa (-) get 2-, pb .pa $ (-) get 2-3 = -1
+-- continous passive voices in monad
+mpa = (return :: a -> IO a) ($ 1)
+mpc = (pb .) <$> mpa
+mmplus = (return :: a -> IO a) (+)
+mps =  mpc <*> mmplus
+mpb = (return :: a -> IO a) (($ 2) .)
+mmps = mpb <*> mpa <*> mmplus
+-- still 3
+bmplus = (return :: a -> IO a) . (+) -- look this as onePageData
+inmmps = mpa <*> ( (return 2) >>= bmplus)
+-- still 3
+-- note! $ 2 is different with ($) 2, so we can't fmap $ into functor, only can fmap ($)
+-- so ,we can't make data inside functor become passive!shame!
+-- actually,we can:
+-- note: $ is infixr operator,$ of ($ 2) is infixr operator,too,but ($) is function operator
+-- so you can use fmap (flip ($)) to make inside functor become passive!
+
+mbs = (return :: a -> IO a) "hi"
+--mpbc :: Num p => IO ((a -> p -> c )->a ->c)
+mpbs =  flip ($) mbs
+mpbsc = (.) . flip ($) <$>  mbs  -- (.) is infixr
+
+pas = ($ "ok")
+--mpab :: Num a =>  IO ((a -> a -> c) -> c)
+mpab = mpbsc <*> (return :: a -> IO a) pas
+
+--mminus :: Num a => a -> a -> IO a
+smminus = ($ (fmap . fmap) (return :: a -> IO a)  (++)) -- not pass if put here,weird, mminus :: Num a => a -> a -> IO a , maybe compiler need to know type signatur first here,like c declare
+--pm :: IO [Char]
+pm =  ($ (++) ) <$> mpab -- "okhi"
+
+aminus = join $ smminus <$> mpab
+
+mn3 = (return :: a -> IO a) (3 :: Num p => p) -- it's not work: return 3 :: Num p => p -> IO p
+mpn3 = flip ($) mn3
+mcpn3 = (.) . flip ($) <$> mn3 -- continuous passive version
+pn2 = ($ 2) 
+mpn2n3 = mcpn3 <*> (return :: a -> IO a) pn2
+mnpminus = ($ (fmap . fmap) (return :: a -> IO a) (-))
+mncal = join $ mnpminus <$> mpn2n3
+-- 2-3 = -1
