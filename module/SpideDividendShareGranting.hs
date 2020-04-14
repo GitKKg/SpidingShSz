@@ -118,6 +118,12 @@ getData code = do
   let gbkPage = L8.fromStrict . encodeUtf8 $ txt
   traverse print . fromJust $ scrapeStringLike gbkPage stockScraper
   return ()
+  -- new topic, how to parallelly pass 2 parameters inside monad into 2 monad
+  -- first to figure out how to pass 2 parameters into 1 monad:
+  -- ma = return 1 :: IO Integer
+  -- mb = return 2 :: IO Integer
+  -- mminus = (return :: a -> IO a) (-)
+  -- mresult = mminus <*> ma <*> mb -- -1
   where
     stockScraper :: Scraper L8.ByteString [RightInfo]
     stockScraper =
@@ -158,3 +164,19 @@ ttt = (,,) <$> (+1) <*> (+2) <*> (+3) $ 12
 addSame = (plus3) <$> (+1) <*> (($2). (-) ) <*> (*3) $ 8
 --(8+1) + (8-2) + (8*3) == 39
 plus3 = \x y z -> x+y+z
+
+-- double passivce voices , operator and operand swap its role each other to achieve
+-- two parammeter parallell with two functions with same types
+paralell2Para = (,) <$> ($ (+)) <*> ($ (-)) $ (($ 2) . ($ 3)) 
+--(5,1)
+
+mp2 = (return :: a -> IO a) ($ 2)
+mp3 = (return :: a -> IO a) ($ 3)
+mPlus = (return :: a -> IO a) ($ (+))
+mMinus = (return :: a -> IO a) ($ (-))
+-- same protype run in monad, maybe useful to above scraper
+mParalell2Para = (,) <$> (mPlus <*>) <*> (mMinus <*>) $ fmap (.) mp2 <*> mp3
+-- fst mParalell2Para
+-- 5
+-- snd mParalell2Para
+-- 1
