@@ -126,14 +126,15 @@ getData code = do
   -- mresult = mminus <*> ma <*> mb -- -1
   where
     stockScraper :: Scraper L8.ByteString [RightInfo]
-    stockScraper =
-      (<|>) <$> (onePageDataB =<<)  <*> (onePageDataA =<<) $  getName  where
+    stockScraper = -- use prototypes of mmParalell2Para to paralell parameters with functions in monad 
+      (<|>) <$> ( ($ onePageDataB) =<<)  <*> ( ($ onePageDataA) =<<)
+      $ fmap (.) (return ($ code)) <*> (fmap (flip ($)) getName)  where
       getName = text stockName :: Scraper L8.ByteString L8.ByteString
-      onePageDataB :: L8.ByteString -> Scraper L8.ByteString [RightInfo]
-      onePageDataB = (fmap.fmap) Left . chroots  bonusRow  . oneDayScraper  where
-        oneDayScraper name = undefined
-      onePageDataA :: L8.ByteString -> Scraper L8.ByteString [RightInfo]
-      onePageDataA = (fmap . fmap) Right . chroots allotmentRow  . oneDayScraper  where
+      onePageDataB :: L8.ByteString -> String -> Scraper L8.ByteString [RightInfo]
+      onePageDataB = (fmap.fmap) ((fmap.fmap) Left . chroots  bonusRow)   oneDayScraper  where
+        oneDayScraper  = undefined
+      onePageDataA :: L8.ByteString -> String ->Scraper L8.ByteString [RightInfo]
+      onePageDataA = (fmap.fmap) ((fmap . fmap) Right . chroots allotmentRow)  oneDayScraper  where
         oneDayScraper = undefined
       -- getName >>= onePageData where
       -- getName = text stockName :: Scraper L8.ByteString L8.ByteString
@@ -165,7 +166,7 @@ addSame = (plus3) <$> (+1) <*> (($2). (-) ) <*> (*3) $ 8
 --(8+1) + (8-2) + (8*3) == 39
 plus3 = \x y z -> x+y+z
 
--- double passivce voices , operator and operand swap its role each other to achieve
+-- double passivce voices , operator and operand swap its role and position each other to achieve
 -- two parammeter parallell with two functions with same types
 paralell2Para = (,) <$> ($ (+)) <*> ($ (-)) $ (($ 2) . ($ 3)) 
 --(5,1)
@@ -180,3 +181,11 @@ mParalell2Para = (,) <$> (mPlus <*>) <*> (mMinus <*>) $ fmap (.) mp2 <*> mp3
 -- 5
 -- snd mParalell2Para
 -- 1
+
+-- protype could be used by onePageData above, two parameters paralell with two functions which get same type,but not in monad, but geneate monad
+omPlus = (fmap.fmap) (return :: a -> IO a)  (+)
+omMinus = (fmap.fmap) (return :: a -> IO a)  (-)
+pMoPlus = ($ omPlus)
+pMoMinus = ($ omMinus)
+mmParalell2Para = (,) <$> (pMoPlus =<<) <*> (pMoMinus =<<) $ fmap (.) mp2 <*> mp3
+-- still (5,1)
