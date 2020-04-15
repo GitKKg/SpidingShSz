@@ -51,6 +51,11 @@ import qualified Data.Text.ICU as ICU
 
 import DataBase
 
+import Control.Monad
+import Debug.Trace
+
+import Text.Read
+
 -- http://money.finance.sina.com.cn/corp/go.php/vISSUE_ShareBonus/stockid/002166.phtml
 sinaURL :: String ->String
 sinaURL code = "http://money.finance.sina.com.cn/corp/go.php/vISSUE_ShareBonus/stockid/"
@@ -104,10 +109,14 @@ allotmentTab = "table" @: [AttributeString "id" @= "sharebonus_2"]
 allotmentRow :: Selector
 allotmentRow = allotmentTab // "tbody" `atDepth` 1 // "tr" `atDepth` 1
 
+-- <|> of Scraper seems just discard one operand,so must implement <> to collect two scrapers results
+instance Semigroup a => Semigroup (Scraper r a) where
+  sa <> sb = fmap (<>) sa  <*> sb
+
 getData :: String -> IO ()
 getData code = do
   systemManager <- newManager tlsManagerSettings
-  requestSinaNoHead <- parseRequest $ sinaURL "000002"
+  requestSinaNoHead <- parseRequest $ sinaURL code
   responseSinaNoHead <- httpLbs requestSinaNoHead systemManager
   putStrLn $ "The Bing status code was: " ++ (show $ statusCode $ responseStatus responseSinaNoHead)
   gbk <- ICU.open "gbk" Nothing
@@ -125,22 +134,76 @@ getData code = do
   -- mminus = (return :: a -> IO a) (-)
   -- mresult = mminus <*> ma <*> mb -- -1
   where
+    floorFloatToInt = (floor :: Float -> Int) . (1000 *)
+    removeComma :: String -> String -- in case we get 120,500.56 such great number
+    removeComma = unpack . mconcat . splitOn (pack ",") . pack
     stockScraper :: Scraper L8.ByteString [RightInfo]
-    stockScraper = -- use prototypes of mmParalell2Para to paralell parameters with functions in monad 
-      (<|>) <$> ( ($ onePageDataB) =<<)  <*> ( ($ onePageDataA) =<<)
+    stockScraper = -- use prototypes of mmParalell2Para to paralell parameters with functions in monad
+      -- change <|> to <>,for <\> just discard onePageDataA's result
+      (<>) <$> ( ($ onePageDataB) =<<)  <*> ( ($ onePageDataA) =<<)
       $ fmap (.) (return ($ code)) <*> (fmap (flip ($)) getName)  where
       getName = text stockName :: Scraper L8.ByteString L8.ByteString
+      -- Bonus Table
       onePageDataB :: L8.ByteString -> String -> Scraper L8.ByteString [RightInfo]
-      onePageDataB = (fmap.fmap) ((fmap.fmap) Left . chroots  bonusRow)   oneDayScraper  where
-        oneDayScraper  = undefined
+      onePageDataB = (fmap.fmap) ((fmap.fmap) Left . chroots  bonusRow)   oneDayScraperB  where
+        oneDayScraperB name code  = do
+          inSerial $ do
+            traceM $ "name is " ++ (T.unpack .decodeUtf8.L8.toStrict)  name
+            announeDateB <-  (read :: String -> Int) . dateToNum . L8.unpack  <$> (seekNext $ text "td")
+            traceM $ "announeDateB is " ++ show announeDateB
+            bonusSharesRatio <- floorFloatToInt . (read :: String -> Float) .removeComma . L8.unpack <$> (seekNext $ text "td")
+            traceM $ "bonusSharesRatio is " ++ show bonusSharesRatio
+            sharesTranscent <- floorFloatToInt . (read :: String -> Float) .removeComma . L8.unpack <$> (seekNext $ text "td")
+            dividend <- floorFloatToInt . (read :: String -> Float) .removeComma . L8.unpack <$> (seekNext $ text "td")
+            process <- decodeUtf8 . L8.toStrict <$> (seekNext $ text "td")
+            traceM $ "process is " ++ T.unpack process
+            traceM $ "process is 实施 is " ++ show (T.unpack process == "实施")
+            exRightDateB <- -- don't think do while in monad do sugar,all these name on left of <- are just parameters in every layer of monad >>= functions chain
+              if (T.unpack process == "实施")
+              then  readCaus <$> (seekNext $ text "td")
+              else  return 0
+            recordDateB <-
+              if (T.unpack process == "实施")
+              then  readCaus  <$> (seekNext $ text "td")
+              else  return 0
+            -- use (,) to package parameters to accept if else logic together,but do we know (a,b), a or b which one is valued first?
+            -- (exRightDateB,recordDateB) <-
+            --   if (process == "实施")
+            --   then return ((read :: String -> Int) . dateToNum . L8.unpack  <$> (seekNext $ text "td"),
+            --                (read :: String -> Int) . dateToNum . L8.unpack  <$> (seekNext $ text "td")) -- betweeb two seekNexts ,get no monad >>= relationship,so not contionus,not you want
+            --   else return (return 0,return 0)
+              
+            traceM $ "exRightDateB is " ++ show  exRightDateB
+            traceM $ "recordDateB is " ++ show recordDateB
+            
+            return defaultBonusInfo
+               -- let recordDateB = floorFloatToInt . (read :: String -> Float) .removeComma . L8.unpack <$> (seekNext $ text "td") >>=
+      -- Allotment Table
       onePageDataA :: L8.ByteString -> String ->Scraper L8.ByteString [RightInfo]
-      onePageDataA = (fmap.fmap) ((fmap . fmap) Right . chroots allotmentRow)  oneDayScraper  where
-        oneDayScraper = undefined
+      onePageDataA  = (fmap.fmap) ((fmap . fmap) Right . chroots allotmentRow)  oneDayScraperA  where
+        oneDayScraperA name code = do
+          inSerial $ do
+            --announeDateA <-  (read :: String -> Int) . dateToNum . L8.unpack  <$> (seekNext $ text "td")
+            traceM $ "now onepageDataA name is " ++ (T.unpack .decodeUtf8.L8.toStrict)  name
+            --test <- seekNext $ text "td"
+            --traceM $ L8.unpack test
+            announceDateA <- (read :: String -> Int) . dateToNum . L8.unpack  <$> (seekNext $ text "td")
+            
+            traceM $ "announeDateA is " ++ show announceDateA
+            allotRatio <- floorFloatToInt . (read :: String -> Float) .removeComma . L8.unpack <$> (seekNext $ text "td")
+            traceM $ "allotRatio is " ++ show allotRatio
+            offerPrice <- floorFloatToInt . (read :: String -> Float) .removeComma . L8.unpack <$> (seekNext $ text "td")
+            capStock <- floorFloatToInt . (read :: String -> Float) .removeComma . L8.unpack <$> (seekNext $ text "td")
+            exRightDateA <- readCaus  <$> (seekNext $ text "td")
+            recordDateB <- readCaus  <$> (seekNext $ text "td")
+            return defaultAllotmentInfo
       -- getName >>= onePageData where
       -- getName = text stockName :: Scraper L8.ByteString L8.ByteString
       -- onePageData = chroots  bonusRow  . oneDayScraper  where
       --   oneDayScraper = undefined
-  
+readCaus  = (\res -> if res == Nothing then 0 else fromJust res). (readMaybe :: String -> Maybe Int) . dateToNum . L8.unpack -- sometime we just get "--" but not digital,so must handle in case
+dateToNum :: String -> String
+dateToNum = unpack . mconcat . splitOn (pack "-") . pack  -- 2020-01-01 to 20200101
 -- some paralell mechanism in semantics of (->),ie. fucntion
 f = (+10)
 h = (+12)
