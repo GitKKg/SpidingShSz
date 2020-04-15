@@ -148,14 +148,14 @@ getData code = do
       onePageDataB = (fmap.fmap) ((fmap.fmap) Left . chroots  bonusRow)   oneDayScraperB  where
         oneDayScraperB name code  = do
           inSerial $ do
-            traceM $ "name is " ++ (T.unpack .decodeUtf8.L8.toStrict)  name
-            announeDateB <-  (read :: String -> Int) . dateToNum . L8.unpack  <$> (seekNext $ text "td")
-            traceM $ "announeDateB is " ++ show announeDateB
+            --traceM $ "name is " ++ (T.unpack .decodeUtf8.L8.toStrict)  name
+            announceDateB <-  (read :: String -> Int) . dateToNum . L8.unpack  <$> (seekNext $ text "td")
+            traceM $ "announeDateB is " ++ show announceDateB
             bonusSharesRatio <- floorFloatToInt . (read :: String -> Float) .removeComma . L8.unpack <$> (seekNext $ text "td")
             traceM $ "bonusSharesRatio is " ++ show bonusSharesRatio
             sharesTranscent <- floorFloatToInt . (read :: String -> Float) .removeComma . L8.unpack <$> (seekNext $ text "td")
             dividend <- floorFloatToInt . (read :: String -> Float) .removeComma . L8.unpack <$> (seekNext $ text "td")
-            process <- decodeUtf8 . L8.toStrict <$> (seekNext $ text "td")
+            process <-  decodeUtf8 . L8.toStrict <$> (seekNext $ text "td")
             traceM $ "process is " ++ T.unpack process
             traceM $ "process is 实施 is " ++ show (T.unpack process == "实施")
             exRightDateB <- -- don't think do while in monad do sugar,all these name on left of <- are just parameters in every layer of monad >>= functions chain
@@ -175,8 +175,17 @@ getData code = do
               
             traceM $ "exRightDateB is " ++ show  exRightDateB
             traceM $ "recordDateB is " ++ show recordDateB
-            
-            return defaultBonusInfo
+            traceM $ "B Table,Stock name is " ++ (T.unpack .decodeUtf8.L8.toStrict)  name
+            return defaultBonusInfo {
+              _codeB = pack code,
+              _nameB = decodeUtf8 . L8.toStrict $ name,
+              _announceDateB = announceDateB, 
+              _bonusSharesRatio = bonusSharesRatio,
+              _dividend = dividend,
+              _process = T.unpack process == "实施",
+              _exRightDateB = exRightDateB,
+              _recordDateB = recordDateB
+                                    }
                -- let recordDateB = floorFloatToInt . (read :: String -> Float) .removeComma . L8.unpack <$> (seekNext $ text "td") >>=
       -- Allotment Table
       onePageDataA :: L8.ByteString -> String ->Scraper L8.ByteString [RightInfo]
@@ -184,10 +193,15 @@ getData code = do
         oneDayScraperA name code = do
           inSerial $ do
             --announeDateA <-  (read :: String -> Int) . dateToNum . L8.unpack  <$> (seekNext $ text "td")
-            traceM $ "now onepageDataA name is " ++ (T.unpack .decodeUtf8.L8.toStrict)  name
+            --traceM $ "now onepageDataA name is " ++ (T.unpack .decodeUtf8.L8.toStrict)  name
             --test <- seekNext $ text "td"
             --traceM $ L8.unpack test
-            announceDateA <- (read :: String -> Int) . dateToNum . L8.unpack  <$> (seekNext $ text "td")
+            traceM "hi!exception for 600002"
+            --test <-seekNext $ text "td"
+            --traceM $ "text is " ++ (show . T.unpack .decodeUtf8.L8.toStrict) test
+            -- many stocks A table is just empty,so must take care,using guard to exit in case
+            announceDateA <- readCaus  <$> (seekNext $ text "td")
+            guard (announceDateA /= 0)
             
             traceM $ "announeDateA is " ++ show announceDateA
             allotRatio <- floorFloatToInt . (read :: String -> Float) .removeComma . L8.unpack <$> (seekNext $ text "td")
@@ -195,8 +209,18 @@ getData code = do
             offerPrice <- floorFloatToInt . (read :: String -> Float) .removeComma . L8.unpack <$> (seekNext $ text "td")
             capStock <- floorFloatToInt . (read :: String -> Float) .removeComma . L8.unpack <$> (seekNext $ text "td")
             exRightDateA <- readCaus  <$> (seekNext $ text "td")
-            recordDateB <- readCaus  <$> (seekNext $ text "td")
-            return defaultAllotmentInfo
+            recordDateA <- readCaus  <$> (seekNext $ text "td")
+            traceM $ "A Table,Stock name is " ++ (T.unpack .decodeUtf8.L8.toStrict)  name
+            return defaultAllotmentInfo {
+              _codeA = pack code,
+              _nameA = decodeUtf8 . L8.toStrict $ name,
+              _announceDateA = announceDateA, 
+              _allotRatio = allotRatio,
+              _offerPrice = offerPrice,
+              _capStock = capStock,
+              _exRightDateA = exRightDateA,
+              _recordDateA = recordDateA
+                                        }
       -- getName >>= onePageData where
       -- getName = text stockName :: Scraper L8.ByteString L8.ByteString
       -- onePageData = chroots  bonusRow  . oneDayScraper  where

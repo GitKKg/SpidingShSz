@@ -63,7 +63,7 @@ data BonusInfo = BonusInfo -- dividend and sharesent, 分红 送股 表
   {
     _codeB :: Text,
     _nameB :: Text,
-    _announeDateB :: Int, -- B means Bonus 公告日期
+    _announceDateB :: Int, -- B means Bonus 公告日期
     _bonusSharesRatio :: Int,--Double , -- ratio of shares sent per 10 shares, 送股比例 每10股送股数
     -- use Int not Double,for saving space of database,keep 3 decimal places
     _sharesTranscent :: Int,--Double, -- ratio of shares transcent per 10 shares ,transfer capital common reserve to share capital  转增股比例 每10股转增股数 
@@ -82,7 +82,7 @@ data AllotmentInfo = AllotmentInfo --  Allotment,  配股 表
   {
     _codeA :: Text,
     _nameA :: Text,
-    _announeDateA :: Int, -- A means Allotment
+    _announceDateA :: Int, -- A means Allotment
     _allotRatio :: Int, -- Ratio , 配股比例 每10股可买股数
     _offerPrice :: Int, -- 配股价格
     _capStock :: Int, -- 基准股本
