@@ -21,6 +21,23 @@ description:         Please see the README on GitHub at <https://github.com/gith
 
 dependencies:
 - base >= 4.7 && < 5
+- text
+- scalpel
+- http-client
+- bytestring
+- tagsoup
+- connection
+- network
+- http-client-tls
+- http-types
+- case-insensitive
+- selda
+- selda-sqlite
+- regex-base
+- regex-posix
+- text-icu
+- selda-postgresql
+- selda-json
 
 library:
   source-dirs: module
@@ -35,21 +52,6 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - SpidingShSz
-    - text
-    - scalpel
-    - http-client
-    - bytestring
-    - tagsoup
-    - connection
-    - network
-    - http-client-tls
-    - http-types
-    - case-insensitive
-    - selda
-    - selda-sqlite
-    - regex-base
-    - regex-posix
-    - text-icu
 
 tests:
   SpidingShSz-test:

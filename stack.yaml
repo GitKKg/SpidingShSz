@@ -41,10 +41,11 @@ packages:
 extra-deps:
   - scalpel-core-0.6.1
   - scalpel-0.6.1
-  - selda-0.4.0.0
+  - selda-0.5.1.0
   - selda-sqlite-0.1.7.0
   - text-icu-0.7.0.1
-
+  - selda-postgresql-0.1.8.1
+  - selda-json-0.1.1.0
 # Override default flag values for local packages and extra-deps
 # flags: {}
 

@@ -20,6 +20,8 @@ import Data.Typeable
 
 import Data.Text
 
+-- sudo apt-get install libpq-dev, proxychains stack install selda-postgresql
+import Database.Selda.PostgreSQL
 
 data Stock = Stock  -- the field member name must be exact same with field of table in database which already exist
 -- order no matter, just parts no matter, only name and type matter
@@ -100,3 +102,60 @@ data UpdateTime = UpdateTime
 instance SqlRow UpdateTime
 
 type RightInfo = Either BonusInfo AllotmentInfo
+
+data Pet = Dog | Horse | Dragon
+  deriving (Show, Read, Bounded, Enum)
+instance SqlType Pet
+
+data Person = Person
+  {
+   -- pid  :: ID Person
+  name :: Text
+  , age :: Int
+  , pet :: Maybe Pet
+  } deriving (Generic,Show)
+instance SqlRow Person
+
+people :: Table Person
+people = table "people" [#name :- primary]
+
+insertSara :: SeldaM  () ()
+insertSara = insert_ people [Person  "Sara" 14 Nothing]
+
+insertThenInspect :: SeldaM () [Person]
+insertThenInspect = do
+  insertSara
+  query (select people)
+
+-- initdb.exe -D E:\Tool\PgSqlDB -E UTF-8 -U Kant -W
+-- pg_ctl -D  E:\Tool\PgSqlDB\db  -l db.log start
+
+-- edit pg_hba.conf of server to permmit remote connection by user Kant
+-- # IPv4 local connections:
+-- host    all             Kant             0.0.0.0/0            password
+-- edit postgresql.conf of server to permmit listening all IP
+--listen_addresses = '*'
+
+pgConnectInfo = "postgres" `on` "192.168.51.212" `auth` ("Kant", "123456")
+testPg = (withPostgreSQL :: PGConnectInfo -> SeldaT PG IO () -> IO ()) pgConnectInfo $ do
+  tryCreateTable people
+  num <- tryInsert people
+    [ Person  "Velvet"    19 (Just Dog)
+    , Person  "Kobayashi" 23 (Just Dragon)
+    , Person  "Miyu"      10 Nothing
+    ]
+  liftIO $ print $ "inserted " <> show num <> " rows"
+  adultsAndTheirPets <- query $ do
+    person <- select people
+    restrict (person ! #age .>= 18)
+    return (person ! #name)-- :*: person ! #pet :*: person ! #age)
+    -- return person
+  liftIO $ print adultsAndTheirPets
+  
+--  testPg
+-- "inserted True rows"
+-- ["Velvet","Kobayashi"]
+
+--  testPg
+-- "inserted False rows"
+-- ["Velvet","Kobayashi"]
