@@ -1,8 +1,10 @@
--- This file has been generated from package.yaml by hpack version 0.28.2.
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.31.2.
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 31a90be55dacdff567753bbc61f890a657e6e6cc845e4b75003e896828d921ec
+-- hash: 0e4010da0571c3033c8e1c264d7c2d0580a6c37fb967c42a63b02148c06db759
 
 name:           SpidingShSz
 version:        0.1.0.0
@@ -15,10 +17,9 @@ copyright:      2020 Author name here
 license:        BSD3
 license-file:   LICENSE
 build-type:     Simple
-cabal-version:  >= 1.10
 extra-source-files:
-    ChangeLog.md
     README.md
+    ChangeLog.md
 
 source-repository head
   type: git

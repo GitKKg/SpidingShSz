@@ -139,7 +139,7 @@ getData code = do
     removeComma = unpack . mconcat . splitOn (pack ",") . pack
     stockScraper :: Scraper L8.ByteString [RightInfo]
     stockScraper = -- use prototypes of mmParalell2Para to paralell parameters with functions in monad
-      -- change <|> to <>,for <\> just discard onePageDataA's result
+      -- change <|> to <>,for <|> just discard onePageDataA's result
       (<>) <$> ( ($ onePageDataB) =<<)  <*> ( ($ onePageDataA) =<<)
       $ fmap (.) (return ($ code)) <*> (fmap (flip ($)) getName)  where
       getName = text stockName :: Scraper L8.ByteString L8.ByteString

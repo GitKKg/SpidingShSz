@@ -10,7 +10,8 @@ module DataBase (
     RightInfo,
     defaultStock,
     defaultBonusInfo,
-    defaultAllotmentInfo
+    defaultAllotmentInfo,
+    testPg
 ) where
 
 import Database.Selda   --proxychains stack install selda-0.4.0.0
@@ -22,6 +23,8 @@ import Data.Text
 
 -- sudo apt-get install libpq-dev, proxychains stack install selda-postgresql
 import Database.Selda.PostgreSQL
+
+import Debug.Trace
 
 data Stock = Stock  -- the field member name must be exact same with field of table in database which already exist
 -- order no matter, just parts no matter, only name and type matter
@@ -140,18 +143,32 @@ pgConnectInfo = "postgres" `on` "192.168.51.212" `auth` ("Kant", "123456")
 testPg = (withPostgreSQL :: PGConnectInfo -> SeldaT PG IO () -> IO ()) pgConnectInfo $ do
   tryCreateTable people
   num <- tryInsert people
-    [ Person  "Velvet"    19 (Just Dog)
+    [Person  "Kant"      10 (Just Horse),
+      Person  "Velvet"    19 (Just Dog)
     , Person  "Kobayashi" 23 (Just Dragon)
     , Person  "Miyu"      10 Nothing
+    
     ]
+
+  num <- tryInsert people [Person  "Kant"      10 (Just Horse)]
   liftIO $ print $ "inserted " <> show num <> " rows"
-  adultsAndTheirPets <- query $ do
+  traceM $ "inserted " <> show num <> " rows"
+  traceM $ "wait for input"
+  liftIO $ do
+    input <- getLine
+    putStrLn $ "you inputed " ++ input
+  adultsAndTheirPets <- transaction $ query $ do
     person <- select people
     restrict (person ! #age .>= 18)
     return (person ! #name)-- :*: person ! #pet :*: person ! #age)
     -- return person
   liftIO $ print adultsAndTheirPets
-  
+  traceM $ show adultsAndTheirPets
+  peopleWithHorse <- query $ do
+    person <- select people
+    restrict (person ! #pet .==  literal (Just Horse)) -- see Expressions over columns of Database.Selda document
+    return (person ! #name)-- :*: person ! #pet :*: person ! #age)
+  traceM $ show peopleWithHorse
 --  testPg
 -- "inserted True rows"
 -- ["Velvet","Kobayashi"]
@@ -159,3 +176,5 @@ testPg = (withPostgreSQL :: PGConnectInfo -> SeldaT PG IO () -> IO ()) pgConnect
 --  testPg
 -- "inserted False rows"
 -- ["Velvet","Kobayashi"]
+
+-- sudo proxychains  snap install dbeaver-ce  , database tool ,better than pgadimin
