@@ -63,6 +63,12 @@ sinaURL code = "http://money.finance.sina.com.cn/corp/go.php/vISSUE_ShareBonus/s
 
 startDate = 2003 -- season 01
 
+tlsSetting = TLSSettingsSimple False False False -- import Network.Connection
+hostAddr = "127.0.0.1" :: HostName -- import Network.Socket
+-- using 192.168.1.2 will Exception as ConnectionTimeout
+portNumber = 5678 :: PortNumber
+proxySetting = SockSettingsSimple hostAddr portNumber
+
 -- note: for per stock code,we need:
 -- 1. year,season,month,day of current day spidered
 -- 2. latest year,season,month,day of data of database
@@ -113,9 +119,11 @@ allotmentRow = allotmentTab // "tbody" `atDepth` 1 // "tr" `atDepth` 1
 instance Semigroup a => Semigroup (Scraper r a) where
   sa <> sb = fmap (<>) sa  <*> sb
 
-getData :: String -> IO ()
-getData code = do
-  systemManager <- newManager tlsManagerSettings
+getData :: Bool -> String -> IO ()
+getData useProxy code = do
+  let v2managerSetting = mkManagerSettings tlsSetting (Just proxySetting)
+  systemManager <- newManager $ if useProxy then v2managerSetting else tlsManagerSettings
+  
   requestSinaNoHead <- parseRequest $ sinaURL code
   responseSinaNoHead <- httpLbs requestSinaNoHead systemManager
   putStrLn $ "The Bing status code was: " ++ (show $ statusCode $ responseStatus responseSinaNoHead)

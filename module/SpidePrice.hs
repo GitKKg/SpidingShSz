@@ -63,6 +63,12 @@ import Data.Functor
 someFunc :: IO ()
 someFunc = putStrLn "someFunc"
 
+tlsSetting = TLSSettingsSimple False False False -- import Network.Connection
+hostAddr = "127.0.0.1" :: HostName -- import Network.Socket
+-- using 192.168.1.2 will Exception as ConnectionTimeout
+portNumber = 5678 :: PortNumber
+proxySetting = SockSettingsSimple hostAddr portNumber
+
 stock163URL :: String -> Int -> Int -> String
 stock163URL stockCode year season =
   "http://quotes.money.163.com/trade/lsjysj_" ++ stockCode ++ ".html?year="
@@ -78,9 +84,11 @@ stockTab =  "div" @: [hasClass "inner_box"] // "table" @:[AttributeString "class
 -- honestly, regexLike relevant doc is pile of shit
 data1OrData2 = makeRegex ("^$|dbrow" :: String) :: Regex -- must specify type notation "String" or else complier will complain
 
-onePageData :: String -> Int -> Int -> IO () --"000001" 2020 01
-onePageData stockCode year season = do
-  systemManager <- newManager tlsManagerSettings
+onePageData :: Bool -> String -> Int -> Int -> IO () --"000001" 2020 01
+onePageData useProxy stockCode year season = do
+  let v2managerSetting = mkManagerSettings tlsSetting (Just proxySetting)
+  systemManager <- newManager $ if useProxy then v2managerSetting else tlsManagerSettings
+  
   request163NoHead <- parseRequest $ stock163URL stockCode year season
   response163NoHead <- httpLbs request163NoHead systemManager
   traverse print . fromJust $ scrapeStringLike (responseBody response163NoHead)  stockScraper
