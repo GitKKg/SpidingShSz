@@ -120,7 +120,7 @@ data Person = Person
 instance SqlRow Person
 
 people :: Table Person
-people = table "people" [#name :- primary]
+people = table "people" [#name :+ #pet :- unique]
 
 insertSara :: SeldaM  () ()
 insertSara = insert_ people [Person  "Sara" 14 Nothing]
@@ -159,7 +159,7 @@ testPg = (withPostgreSQL :: PGConnectInfo -> SeldaT PG IO () -> IO ()) pgConnect
   traceM $ "1st time ,inserted " <> show num <> " rows"
 
   num <- tryInsert people [Person  "Kant"      10 (Just Horse)]
-  liftIO $ print $ "inserted " <> show num <> " rows"
+  liftIO $ print $ "2nd time inserted " <> show num <> " rows"
   traceM $ "2nd time,inserted " <> show num <> " rows"
   traceM $ "wait for input"
   liftIO $ do
@@ -195,7 +195,7 @@ testPg2 = do
   enum <- (try :: IO Int -> IO (Either SeldaError  Int )) $
     runSeldaT (do
                   tryCreateTable people
-                  insert people [Person  "KantSure" 10 (Just Dragon)])
+                  insert people [Person  "Kant" 10 (Just Dragon)])
     pgCon
   num <- case enum of
     Left e ->  do
@@ -203,5 +203,11 @@ testPg2 = do
       return 0
     Right n -> return n
   traceM $ "1st time ,inserted " <> show num <> " rows"
+  num <- runSeldaT (do
+                deleteFrom people (\person -> person ! #pet .== just (literal Dog) )
+                -- if you can't give a then b seperatly, you can consider giving a -> b as a function!
+                )
+    pgCon
+  traceM $ "deleted " ++ show num ++ "row\n"
   seldaClose pgCon
   return ()
