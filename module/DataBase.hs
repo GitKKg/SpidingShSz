@@ -130,7 +130,10 @@ insertThenInspect = do
   insertSara
   query (select people)
 
+-- Create databse
 -- initdb.exe -D E:\Tool\PgSqlDB -E UTF-8 -U Kant -W
+
+-- start running database
 -- pg_ctl -D  E:\Tool\PgSqlDB\db  -l db.log start
 
 -- edit pg_hba.conf of server to permmit remote connection by user Kant
@@ -141,18 +144,23 @@ insertThenInspect = do
 
 pgConnectInfo = "postgres" `on` "192.168.51.212" `auth` ("Kant", "123456")
 testPg = (withPostgreSQL :: PGConnectInfo -> SeldaT PG IO () -> IO ()) pgConnectInfo $ do
+  tryDropTable people
   tryCreateTable people
-  num <- tryInsert people
+  enum <- liftIO . (try :: IO (SeldaT PG IO Int) -> IO (Either SeldaError (SeldaT PG IO Int))) . return $ insert people
     [Person  "Kant"      10 (Just Horse),
       Person  "Velvet"    19 (Just Dog)
     , Person  "Kobayashi" 23 (Just Dragon)
     , Person  "Miyu"      10 Nothing
     
     ]
+  num <- case enum of
+    Left e ->  return 0
+    Right n -> n
+  traceM $ "1st time ,inserted " <> show num <> " rows"
 
   num <- tryInsert people [Person  "Kant"      10 (Just Horse)]
   liftIO $ print $ "inserted " <> show num <> " rows"
-  traceM $ "inserted " <> show num <> " rows"
+  traceM $ "2nd time,inserted " <> show num <> " rows"
   traceM $ "wait for input"
   liftIO $ do
     input <- getLine
@@ -169,6 +177,7 @@ testPg = (withPostgreSQL :: PGConnectInfo -> SeldaT PG IO () -> IO ()) pgConnect
     restrict (person ! #pet .==  literal (Just Horse)) -- see Expressions over columns of Database.Selda document
     return (person ! #name)-- :*: person ! #pet :*: person ! #age)
   traceM $ show peopleWithHorse
+  --dropTable people --
 --  testPg
 -- "inserted True rows"
 -- ["Velvet","Kobayashi"]
