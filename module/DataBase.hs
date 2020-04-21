@@ -23,7 +23,7 @@ import Data.Text
 
 -- sudo apt-get install libpq-dev, proxychains stack install selda-postgresql
 import Database.Selda.PostgreSQL
-
+import Database.Selda.Backend.Internal
 import Debug.Trace
 
 data Stock = Stock  -- the field member name must be exact same with field of table in database which already exist
@@ -146,7 +146,7 @@ pgConnectInfo = "postgres" `on` "192.168.51.212" `auth` ("Kant", "123456")
 testPg = (withPostgreSQL :: PGConnectInfo -> SeldaT PG IO () -> IO ()) pgConnectInfo $ do
   tryDropTable people
   tryCreateTable people
-  enum <- liftIO . (try :: IO (SeldaT PG IO Int) -> IO (Either SeldaError (SeldaT PG IO Int))) . return $ insert people
+  enum <- liftIO . (try :: IO (SeldaT PG IO Int) -> IO (Either SeldaError (SeldaT PG IO Int))) . return $ insert people -- can't catch exception
     [Person  "Kant"      10 (Just Horse),
       Person  "Velvet"    19 (Just Dog)
     , Person  "Kobayashi" 23 (Just Dragon)
@@ -187,3 +187,21 @@ testPg = (withPostgreSQL :: PGConnectInfo -> SeldaT PG IO () -> IO ()) pgConnect
 -- ["Velvet","Kobayashi"]
 
 -- sudo proxychains  snap install dbeaver-ce  , database tool ,better than pgadimin
+
+testPg2 :: IO ()
+testPg2 = do
+  pgCon <- pgOpen pgConnectInfo :: IO (SeldaConnection PG)
+  --runSeldaT (tryDropTable people) pgCon
+  enum <- (try :: IO Int -> IO (Either SeldaError  Int )) $
+    runSeldaT (do
+                  tryCreateTable people
+                  insert people [Person  "KantSure" 10 (Just Dragon)])
+    pgCon
+  num <- case enum of
+    Left e ->  do
+      traceM $ "exception :" ++ show e ++ ", just return 0"
+      return 0
+    Right n -> return n
+  traceM $ "1st time ,inserted " <> show num <> " rows"
+  seldaClose pgCon
+  return ()
