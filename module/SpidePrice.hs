@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings ,TypeApplications #-}
 
 module SpidePrice
     ( someFunc,
@@ -60,6 +60,29 @@ import DataBase
 
 import Control.Monad
 import Data.Functor
+
+import Control.Error -- from the 'errors' package
+import Control.Monad
+import Control.Monad.Trans
+import Control.Monad.Trans.Except
+import Control.Monad.Trans.Maybe
+import Control.Monad.Trans.Either
+--exit = mzero
+
+-- Either is monad, and >> chain of Either will break at the 1st Left,so could use this feature to exit in advance
+-- ExceptT too, as monad transformer, could use lift,lifIO to bring try ,catch such exception io inside,so as to wrap your routine will induce exception in ExcepT monad chain >> block, make Except monad block exit at once when encounter first exception you specifying, and you get return calue inside Left,if no exception at all, you get return value in Right
+-- MaybeT is similar,but just return Nothing when exit due to exception,return Just xx when finished normally
+
+mayForEver = runMaybeT $ forever $  do
+    str <- lift getLine
+    when (str == "exit") $ liftIO (print "exit") >> mzero
+    traceM $ "continue"
+
+ex2 = runExceptT $ forever $ do
+  str <- lift getLine
+  when (str == "exit") $ left 1 -- only left will make loop exit, but right will continue loop
+  liftIO $ print "continue"
+    
 someFunc :: IO ()
 someFunc = putStrLn "someFunc"
 
@@ -90,7 +113,15 @@ onePageData useProxy stockCode year season = do
   systemManager <- newManager $ if useProxy then v2managerSetting else tlsManagerSettings
   
   request163NoHead <- parseRequest $ stock163URL stockCode year season
-  response163NoHead <- httpLbs request163NoHead systemManager
+  -- TypeApplications make you type less words, use @ !
+  eResponse <- try @SomeException  $ httpLbs request163NoHead systemManager
+  response163NoHead <- case eResponse of
+    Left e -> (traceM $ "exception! is " ++ show e ++ "\nstop onePageData!") >> mzero -- mzero make you exit onePageData in advance
+    Right response ->  return response
+  --guard False
+  traceM $ "get Pages!\n"
+  -- be hold! sometime will get invalid data ,need handling
+  -- Exception: Maybe.fromJust: Nothing
   traverse print . fromJust $ scrapeStringLike (responseBody response163NoHead)  stockScraper
   return ()
   where

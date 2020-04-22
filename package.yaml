@@ -38,6 +38,10 @@ dependencies:
 - text-icu
 - selda-postgresql
 - selda-json
+- errors
+- mtl
+- transformers
+- transformers-either
 
 library:
   source-dirs: module

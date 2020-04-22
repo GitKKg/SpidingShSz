@@ -46,6 +46,11 @@ extra-deps:
   - text-icu-0.7.0.1
   - selda-postgresql-0.1.8.1
   - selda-json-0.1.1.0
+  - errors-2.3.0
+  - mtl-2.2.2
+  - transformers-0.5.5.0
+  - transformers-either-0.1.1
+  
 # Override default flag values for local packages and extra-deps
 # flags: {}
 

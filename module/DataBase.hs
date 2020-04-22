@@ -119,6 +119,15 @@ data Person = Person
   } deriving (Generic,Show)
 instance SqlRow Person
 
+stockPriceT :: Table Stock
+stockPriceT = table "stock" [#_code :- primary]
+
+bonusInfoT :: Table BonusInfo
+bonusInfoT = table "bonus" [#_codeB :- primary]
+
+allotmentT :: Table AllotmentInfo
+allotmentT = table "allot" [#_codeA :- primary]
+
 people :: Table Person
 people = table "people" [#name :+ #pet :- unique]
 
@@ -146,7 +155,9 @@ pgConnectInfo = "postgres" `on` "192.168.51.212" `auth` ("Kant", "123456")
 testPg = (withPostgreSQL :: PGConnectInfo -> SeldaT PG IO () -> IO ()) pgConnectInfo $ do
   tryDropTable people
   tryCreateTable people
-  enum <- liftIO . (try :: IO (SeldaT PG IO Int) -> IO (Either SeldaError (SeldaT PG IO Int))) . return $ insert people -- can't catch exception
+  -- (try :: IO (SeldaT PG IO Int) -> IO (Either SeldaError (SeldaT PG IO Int)))
+  -- see @ make you type so much less words
+  enum <- liftIO . try @SeldaError . return $ insert people -- can't catch exception
     [Person  "Kant"      10 (Just Horse),
       Person  "Velvet"    19 (Just Dog)
     , Person  "Kobayashi" 23 (Just Dragon)
@@ -192,7 +203,9 @@ testPg2 :: IO ()
 testPg2 = do
   pgCon <- pgOpen pgConnectInfo :: IO (SeldaConnection PG)
   --runSeldaT (tryDropTable people) pgCon
-  enum <- (try :: IO Int -> IO (Either SeldaError  Int )) $
+  --(try :: IO Int -> IO (Either SeldaError  Int ))
+  -- see @ make you how much less type!
+  enum <- try @SeldaError  $
     runSeldaT (do
                   tryCreateTable people
                   insert people [Person  "Kant" 10 (Just Dragon)])

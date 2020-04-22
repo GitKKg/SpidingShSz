@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 0e4010da0571c3033c8e1c264d7c2d0580a6c37fb967c42a63b02148c06db759
+-- hash: ce2fd606fa16d7a5f8067acc05d4330d9a667a3c5e093bbd75e0ec2bc60c4d35
 
 name:           SpidingShSz
 version:        0.1.0.0
@@ -39,9 +39,11 @@ library
     , bytestring
     , case-insensitive
     , connection
+    , errors
     , http-client
     , http-client-tls
     , http-types
+    , mtl
     , network
     , regex-base
     , regex-posix
@@ -53,6 +55,8 @@ library
     , tagsoup
     , text
     , text-icu
+    , transformers
+    , transformers-either
   default-language: Haskell2010
 
 executable SpidingShSz
@@ -68,9 +72,11 @@ executable SpidingShSz
     , bytestring
     , case-insensitive
     , connection
+    , errors
     , http-client
     , http-client-tls
     , http-types
+    , mtl
     , network
     , regex-base
     , regex-posix
@@ -82,6 +88,8 @@ executable SpidingShSz
     , tagsoup
     , text
     , text-icu
+    , transformers
+    , transformers-either
   default-language: Haskell2010
 
 test-suite SpidingShSz-test
@@ -98,9 +106,11 @@ test-suite SpidingShSz-test
     , bytestring
     , case-insensitive
     , connection
+    , errors
     , http-client
     , http-client-tls
     , http-types
+    , mtl
     , network
     , regex-base
     , regex-posix
@@ -112,4 +122,6 @@ test-suite SpidingShSz-test
     , tagsoup
     , text
     , text-icu
+    , transformers
+    , transformers-either
   default-language: Haskell2010
