@@ -1,3 +1,5 @@
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeApplications #-}
 -- | 
 {-#  LANGUAGE DeriveGeneric, OverloadedStrings, OverloadedLabels,DuplicateRecordFields #-}
@@ -25,6 +27,8 @@ import Data.Text
 import Database.Selda.PostgreSQL
 import Database.Selda.Backend.Internal
 import Debug.Trace
+import Control.Monad
+import Data.Data
 
 data Stock = Stock  -- the field member name must be exact same with field of table in database which already exist
 -- order no matter, just parts no matter, only name and type matter
@@ -120,13 +124,13 @@ data Person = Person
 instance SqlRow Person
 
 stockPriceT :: Table Stock
-stockPriceT = table "stock" [#_code :- primary]
+stockPriceT = table "stock" [#_code :+ #_date :- unique]
 
 bonusInfoT :: Table BonusInfo
-bonusInfoT = table "bonus" [#_codeB :- primary]
-
+bonusInfoT = table "bonus" [#_codeB :+ #_announceDateB  :- unique]
+-- ocaasionly ,we get no exRightDate when it is latest,so could not join it in unique
 allotmentT :: Table AllotmentInfo
-allotmentT = table "allot" [#_codeA :- primary]
+allotmentT = table "allot" [#_codeA :+ #_announceDateA  :- unique]
 
 people :: Table Person
 people = table "people" [#name :+ #pet :- unique]
@@ -152,7 +156,8 @@ insertThenInspect = do
 --listen_addresses = '*'
 
 pgConnectInfo = "postgres" `on` "192.168.51.212" `auth` ("Kant", "123456")
-testPg = (withPostgreSQL :: PGConnectInfo -> SeldaT PG IO () -> IO ()) pgConnectInfo $ do
+-- (withPostgreSQL :: PGConnectInfo -> SeldaT PG IO () -> IO ())
+testPg = withPostgreSQL @IO  pgConnectInfo $ do
   tryDropTable people
   tryCreateTable people
   -- (try :: IO (SeldaT PG IO Int) -> IO (Either SeldaError (SeldaT PG IO Int)))
@@ -201,26 +206,80 @@ testPg = (withPostgreSQL :: PGConnectInfo -> SeldaT PG IO () -> IO ()) pgConnect
 
 testPg2 :: IO ()
 testPg2 = do
-  pgCon <- pgOpen pgConnectInfo :: IO (SeldaConnection PG)
+  -- pgOpen pgConnectInfo :: IO (SeldaConnection PG)
+  pgCon <- pgOpen pgConnectInfo
   --runSeldaT (tryDropTable people) pgCon
   --(try :: IO Int -> IO (Either SeldaError  Int ))
   -- see @ make you how much less type!
-  enum <- try @SeldaError  $
+  enum <- try @SeldaError $
     runSeldaT (do
                   tryCreateTable people
                   insert people [Person  "Kant" 10 (Just Dragon)])
     pgCon
   num <- case enum of
     Left e ->  do
-      traceM $ "exception :" ++ show e ++ ", just return 0"
+      traceM $ "exception : \n" ++ show e ++ ",\njust return 0"
       return 0
     Right n -> return n
   traceM $ "1st time ,inserted " <> show num <> " rows"
   num <- runSeldaT (do
                 deleteFrom people (\person -> person ! #pet .== just (literal Dog) )
-                -- if you can't give a then b seperatly, you can consider giving a -> b as a function!
+                -- if you can't give a then b sepaeratly, you can consider giving a -> b as a function!
                 )
     pgCon
   traceM $ "deleted " ++ show num ++ "row\n"
   seldaClose pgCon
   return ()
+
+-- {-# LANGUAGE DeriveDataTypeable #-}
+-- {-# LANGUAGE StandaloneDeriving #-}
+-- introduce toConstrt to compare value constructor of SeldaError,so we can judge specific exception status,such DbError or SqlError
+deriving instance Data SeldaError
+
+tempSPt :: Table Stock
+tempSPt = table "tempSPt" [#_code :+ #_date :- unique]
+
+saveStockPrice :: [Stock] -> IO()
+saveStockPrice stockData = do
+  pgCon <- pgOpen pgConnectInfo
+  -- num <- runSeldaT (do
+  --                      tryCreateTable stockPriceT
+  --                      upsert stockPriceT (\_ -> literal True) (\row -> row ) stockData) pgCon
+  --traceM $ "upsert " ++ show num ++ " rows"
+
+  -- queryInto :: (MonadSelda m, Relational a) => Table a -> Query (Backend m) (Row (Backend m) a) -> m Int
+  num <- runSeldaT (do
+                       tryDropTable tempSPt
+                       createTable tempSPt
+                       insert tempSPt stockData
+                   )
+         pgCon
+  traceM $ "inserted " ++ show num ++ " rows into temp table\n"
+  enum <- try @SeldaError $
+    runSeldaT (do -- insert into temp table,then queryInto stock table
+                  -- for selda get no insert or ignore api
+                  tryCreateTable stockPriceT
+                  --insert stockPriceT stockData -- all inserted or none
+                  liftIO $ getLine -- test exception
+                  queryInto stockPriceT $ do
+                    sdata <- select tempSPt
+                    restrict (not_ $ (sdata ! #_code ) `isIn` (#_code  `from` select stockPriceT) .&& (sdata ! #_date ) `isIn` (#_date  `from` select stockPriceT) )
+                    return sdata
+              )
+    pgCon
+  num <- case enum of
+    Left e ->  do
+      traceM $ "exception : \n" ++ show e ++ ",\njust return 0"
+      -- strictly speaking, for safety if we don't use withPostgreSQL, we need handle every serious exception exit such as DbError 
+      if toConstr e == toConstr ( DbError "anything")
+        then (traceM $ "Database issue!Stop program!\n") >> seldaClose pgCon >> mzero
+        -- actually don't need seldaClose,selda will close automatically
+        else runSeldaT (dropTable tempSPt) pgCon >> return 0
+    Right n -> return n
+  traceM $ "queryInto " ++ show num ++ " rows\n"
+  runSeldaT (tryDropTable tempSPt) pgCon
+  --traceM $ "1st time ,inserted " <> show num <> " rows"
+  --num <- runSeldaT (upsert stockPriceT (\_ -> literal True) (\row -> row ) stockData) pgCon
+  --traceM $ "upsert " ++ show num ++ " rows"
+  seldaClose pgCon
+  --traceM $ "inserted " <> show num <> " rows"

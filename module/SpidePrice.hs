@@ -116,11 +116,11 @@ onePageData useProxy stockCode year season = do
   -- TypeApplications make you type less words, use @ !
   eResponse <- try @SomeException  $ httpLbs request163NoHead systemManager
   response163NoHead <- case eResponse of
-    Left e -> (traceM $ "exception! is " ++ show e ++ "\nstop onePageData!") >> mzero -- mzero make you exit onePageData in advance
+    Left e -> (traceM $ "exception! is \n" ++ show e ++ "\nstop onePageData!") >> mzero -- mzero make you exit onePageData in advance
     Right response ->  return response
   --guard False
   traceM $ "get Pages!\n"
-  -- be hold! sometime will get invalid data ,need handling
+  -- be hold! sometime will get invalid data ,need handling  
   -- Exception: Maybe.fromJust: Nothing
   traverse print . fromJust $ scrapeStringLike (responseBody response163NoHead)  stockScraper
   return ()
