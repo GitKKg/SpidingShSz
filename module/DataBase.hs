@@ -239,6 +239,12 @@ deriving instance Data SeldaError
 tempSPt :: Table Stock
 tempSPt = table "tempSPt" [#_code :+ #_date :- unique]
 
+-- test demo
+-- s1 = defaultStock {_date=20180906}
+-- s2 = defaultStock {_date=20180908}
+-- saveStockPrice [s1]
+-- saveStockPrice [s1,s2]
+
 saveStockPrice :: [Stock] -> IO()
 saveStockPrice stockData = do
   pgCon <- pgOpen pgConnectInfo
@@ -278,6 +284,115 @@ saveStockPrice stockData = do
     Right n -> return n
   traceM $ "queryInto " ++ show num ++ " rows\n"
   runSeldaT (tryDropTable tempSPt) pgCon
+  --traceM $ "1st time ,inserted " <> show num <> " rows"
+  --num <- runSeldaT (upsert stockPriceT (\_ -> literal True) (\row -> row ) stockData) pgCon
+  --traceM $ "upsert " ++ show num ++ " rows"
+  seldaClose pgCon
+  --traceM $ "inserted " <> show num <> " rows"
+
+
+-- test demo
+-- s1 = defaultBonusInfo {_announceDateB=20180906}
+-- s2 = defaultBonusInfo {_announceDateB=20180909}
+-- saveBonusInfo [s1]
+-- saveBonusInfo [s1,s2]
+
+tempBt :: Table BonusInfo
+tempBt  = table "tempBonusT" [#_codeB :+ #_announceDateB  :- unique]
+
+saveBonusInfo :: [BonusInfo] -> IO()
+saveBonusInfo bT = do
+  pgCon <- pgOpen pgConnectInfo
+  -- num <- runSeldaT (do
+  --                      tryCreateTable stockPriceT
+  --                      upsert stockPriceT (\_ -> literal True) (\row -> row ) stockData) pgCon
+  --traceM $ "upsert " ++ show num ++ " rows"
+
+  -- queryInto :: (MonadSelda m, Relational a) => Table a -> Query (Backend m) (Row (Backend m) a) -> m Int
+  num <- runSeldaT (do
+                       tryDropTable tempBt
+                       createTable tempBt
+                       insert tempBt bT
+                   )
+         pgCon
+  traceM $ "inserted " ++ show num ++ " rows into temp table\n"
+  enum <- try @SeldaError $
+    runSeldaT (do -- insert into temp table,then queryInto stock table
+                  -- for selda get no insert or ignore api
+                  tryCreateTable bonusInfoT
+                  --insert stockPriceT stockData -- all inserted or none
+                  liftIO $ getLine -- test exception
+                  queryInto bonusInfoT $ do
+                    sdata <- select tempBt
+                    restrict (not_ $ (sdata ! #_codeB) `isIn` (#_codeB  `from` select bonusInfoT) .&& (sdata ! #_announceDateB ) `isIn` (#_announceDateB `from` select bonusInfoT) )
+                    return sdata
+              )
+    pgCon
+  num <- case enum of
+    Left e ->  do
+      traceM $ "exception : \n" ++ show e ++ ",\njust return 0"
+      -- strictly speaking, for safety if we don't use withPostgreSQL, we need handle every serious exception exit such as DbError 
+      if toConstr e == toConstr ( DbError "anything")
+        then (traceM $ "Database issue!Stop program!\n") >> seldaClose pgCon >> mzero
+        -- actually don't need seldaClose,selda will close automatically
+        else runSeldaT (dropTable tempBt) pgCon >> return 0
+    Right n -> return n
+  traceM $ "queryInto " ++ show num ++ " rows\n"
+  runSeldaT (tryDropTable tempBt) pgCon
+  --traceM $ "1st time ,inserted " <> show num <> " rows"
+  --num <- runSeldaT (upsert stockPriceT (\_ -> literal True) (\row -> row ) stockData) pgCon
+  --traceM $ "upsert " ++ show num ++ " rows"
+  seldaClose pgCon
+  --traceM $ "inserted " <> show num <> " rows"
+
+-- test demo
+-- s1 = defaultAllotmentInfo {_announceDateA=20180906}
+-- s2 = defaultAllotmentInfo {_announceDateA=20180909}
+-- saveAllotmentInfo [s1]
+-- saveAllotmentInfo [s1,s2]
+
+tempAt :: Table AllotmentInfo
+tempAt  = table "tempAllotmentT" [#_codeA :+ #_announceDateA  :- unique]
+
+saveAllotmentInfo :: [AllotmentInfo] -> IO()
+saveAllotmentInfo aT = do
+  pgCon <- pgOpen pgConnectInfo
+  -- num <- runSeldaT (do
+  --                      tryCreateTable stockPriceT
+  --                      upsert stockPriceT (\_ -> literal True) (\row -> row ) stockData) pgCon
+  --traceM $ "upsert " ++ show num ++ " rows"
+
+  -- queryInto :: (MonadSelda m, Relational a) => Table a -> Query (Backend m) (Row (Backend m) a) -> m Int
+  num <- runSeldaT (do
+                       tryDropTable tempAt
+                       createTable tempAt
+                       insert tempAt aT
+                   )
+         pgCon
+  traceM $ "inserted " ++ show num ++ " rows into temp table\n"
+  enum <- try @SeldaError $
+    runSeldaT (do -- insert into temp table,then queryInto stock table
+                  -- for selda get no insert or ignore api
+                  tryCreateTable allotmentT
+                  --insert stockPriceT stockData -- all inserted or none
+                  liftIO $ getLine -- test exception
+                  queryInto allotmentT $ do
+                    sdata <- select tempAt
+                    restrict (not_ $ (sdata ! #_codeA) `isIn` (#_codeA  `from` select allotmentT) .&& (sdata ! #_announceDateA ) `isIn` (#_announceDateA `from` select allotmentT) )
+                    return sdata
+              )
+    pgCon
+  num <- case enum of
+    Left e ->  do
+      traceM $ "exception : \n" ++ show e ++ ",\njust return 0"
+      -- strictly speaking, for safety if we don't use withPostgreSQL, we need handle every serious exception exit such as DbError 
+      if toConstr e == toConstr ( DbError "anything")
+        then (traceM $ "Database issue!Stop program!\n") >> seldaClose pgCon >> mzero
+        -- actually don't need seldaClose,selda will close automatically
+        else runSeldaT (dropTable tempAt) pgCon >> return 0
+    Right n -> return n
+  traceM $ "queryInto " ++ show num ++ " rows\n"
+  runSeldaT (tryDropTable tempAt) pgCon
   --traceM $ "1st time ,inserted " <> show num <> " rows"
   --num <- runSeldaT (upsert stockPriceT (\_ -> literal True) (\row -> row ) stockData) pgCon
   --traceM $ "upsert " ++ show num ++ " rows"
