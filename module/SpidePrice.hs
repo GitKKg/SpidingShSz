@@ -69,6 +69,8 @@ import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.Either
 --exit = mzero
 
+import Control.Concurrent
+
 -- Either is monad, and >> chain of Either will break at the 1st Left,so could use this feature to exit in advance
 -- ExceptT too, as monad transformer, could use lift,lifIO to bring try ,catch such exception io inside,so as to wrap your routine will induce exception in ExcepT monad chain >> block, make Except monad block exit at once when encounter first exception you specifying, and you get return calue inside Left,if no exception at all, you get return value in Right
 -- MaybeT is similar,but just return Nothing when exit due to exception,return Just xx when finished normally
@@ -113,12 +115,19 @@ onePageData useProxy stockCode year season = do
   systemManager <- newManager $ if useProxy then v2managerSetting else tlsManagerSettings
   
   request163NoHead <- parseRequest $ stock163URL stockCode year season
-  -- TypeApplications make you type less words, use @ !
-  eResponse <- try @SomeException  $ httpLbs request163NoHead systemManager
-  response163NoHead <- case eResponse of
-    Left e -> (traceM $ "exception! is \n" ++ show e ++ "\nstop onePageData!") >> mzero -- mzero make you exit onePageData in advance
-    Right response ->  return response
-  --guard False
+  let getpage = do
+        -- TypeApplications make you type less words, use @ !
+        eResponse <- try @SomeException  $ httpLbs request163NoHead systemManager
+        case eResponse of
+          Left e -> do
+            traceM $ "exception! is \n" ++ show e ++ "\nstop onePageData!"
+            traceM $ "wait for 1s,repeat again \n"
+            threadDelay 1000000
+            getpage -- mzero make you exit onePageData in advance
+          Right response ->  return response
+          
+  response163NoHead <- getpage 
+  
   traceM $ "get Pages!\n"
   -- be hold! sometime will get invalid data ,need handling  
   -- Exception: Maybe.fromJust: Nothing
