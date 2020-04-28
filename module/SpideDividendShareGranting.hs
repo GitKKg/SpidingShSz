@@ -1,5 +1,5 @@
 -- | 
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings,TypeApplications #-}
 module SpideDividendShareGranting where
 
 import Text.HTML.Scalpel
@@ -55,6 +55,8 @@ import Control.Monad
 import Debug.Trace
 
 import Text.Read
+
+import Control.Concurrent
 
 -- http://money.finance.sina.com.cn/corp/go.php/vISSUE_ShareBonus/stockid/002166.phtml
 sinaURL :: String ->String
@@ -119,13 +121,25 @@ allotmentRow = allotmentTab // "tbody" `atDepth` 1 // "tr" `atDepth` 1
 instance Semigroup a => Semigroup (Scraper r a) where
   sa <> sb = fmap (<>) sa  <*> sb
 
-getData :: Bool -> String -> IO ()
+getData :: Bool -> String -> IO [RightInfo]
 getData useProxy code = do
   let v2managerSetting = mkManagerSettings tlsSetting (Just proxySetting)
   systemManager <- newManager $ if useProxy then v2managerSetting else tlsManagerSettings
   
   requestSinaNoHead <- parseRequest $ sinaURL code
-  responseSinaNoHead <- httpLbs requestSinaNoHead systemManager
+  let getpage = do
+        -- TypeApplications make you type less words, use @ !
+        eResponse <- try @SomeException  $ httpLbs requestSinaNoHead systemManager
+        case eResponse of
+          Left e -> do
+            traceM $ "Sina exception! is \n" ++ show e ++ "\nstop onePageData!"
+            traceM $ "wait for 1s,repeat again \n"
+            threadDelay 1000000
+            getpage -- mzero make you exit onePageData in advance
+          Right response ->  return response
+          
+  responseSinaNoHead <- getpage
+  
   putStrLn $ "The Bing status code was: " ++ (show $ statusCode $ responseStatus responseSinaNoHead)
   gbk <- ICU.open "gbk" Nothing
   let txt :: Text
@@ -134,7 +148,8 @@ getData useProxy code = do
   -- 万科A
   let gbkPage = L8.fromStrict . encodeUtf8 $ txt
   traverse print . fromJust $ scrapeStringLike gbkPage stockScraper
-  return ()
+  traverse return . fromJust $ scrapeStringLike gbkPage stockScraper
+  
   -- new topic, how to parallelly pass 2 parameters inside monad into 2 monad
   -- first to figure out how to pass 2 parameters into 1 monad:
   -- ma = return 1 :: IO Integer
