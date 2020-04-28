@@ -109,10 +109,14 @@ stockTab =  "div" @: [hasClass "inner_box"] // "table" @:[AttributeString "class
 -- honestly, regexLike relevant doc is pile of shit
 data1OrData2 = makeRegex ("^$|dbrow" :: String) :: Regex -- must specify type notation "String" or else complier will complain
 
-onePageData :: Bool -> String -> Int -> Int -> IO [Stock] --"000001" 2020 01
-onePageData useProxy stockCode year season = do
-  let v2managerSetting = mkManagerSettings tlsSetting (Just proxySetting)
-  systemManager <- newManager $ if useProxy then v2managerSetting else tlsManagerSettings
+-- proxy port, stock code, year, season
+onePageData :: Maybe PortNumber -> String -> Int -> Int -> IO [Stock] --"000001" 2020 01
+onePageData mp stockCode year season = do
+  --let v2managerSetting = mkManagerSettings tlsSetting (Just proxySetting)
+  systemManager <- newManager $
+    if isJust mp
+    then mkManagerSettings tlsSetting (Just $ SockSettingsSimple hostAddr (fromJust mp))
+    else tlsManagerSettings
   
   request163NoHead <- parseRequest $ stock163URL stockCode year season
   let getpage = do

@@ -121,11 +121,14 @@ allotmentRow = allotmentTab // "tbody" `atDepth` 1 // "tr" `atDepth` 1
 instance Semigroup a => Semigroup (Scraper r a) where
   sa <> sb = fmap (<>) sa  <*> sb
 
-getData :: Bool -> String -> IO [RightInfo]
-getData useProxy code = do
-  let v2managerSetting = mkManagerSettings tlsSetting (Just proxySetting)
-  systemManager <- newManager $ if useProxy then v2managerSetting else tlsManagerSettings
-  
+getData :: Maybe PortNumber -> String -> IO [RightInfo]
+getData mp code = do
+  --let v2managerSetting = mkManagerSettings tlsSetting (Just proxySetting)
+  systemManager <- newManager $
+    if isJust mp
+    then mkManagerSettings tlsSetting (Just $ SockSettingsSimple hostAddr (fromJust mp))
+    else tlsManagerSettings
+    
   requestSinaNoHead <- parseRequest $ sinaURL code
   let getpage = do
         -- TypeApplications make you type less words, use @ !
