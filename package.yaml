@@ -42,6 +42,9 @@ dependencies:
 - mtl
 - transformers
 - transformers-either
+- directory
+- process
+- regex-tdfa
 
 library:
   source-dirs: module

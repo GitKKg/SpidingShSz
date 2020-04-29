@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: b1034abdd1a1d78a95d20dfc911f19244d5136a533b3e782225a9be94a66cd24
+-- hash: 29ff81193f96aea735350c5527e210db850aa53c3ff95849987bfe0797dae419
 
 name:           SpidingShSz
 version:        0.1.0.0
@@ -40,14 +40,17 @@ library
     , bytestring
     , case-insensitive
     , connection
+    , directory
     , errors
     , http-client
     , http-client-tls
     , http-types
     , mtl
     , network
+    , process
     , regex-base
     , regex-posix
+    , regex-tdfa
     , scalpel
     , selda
     , selda-json
@@ -73,14 +76,17 @@ executable SpidingShSz
     , bytestring
     , case-insensitive
     , connection
+    , directory
     , errors
     , http-client
     , http-client-tls
     , http-types
     , mtl
     , network
+    , process
     , regex-base
     , regex-posix
+    , regex-tdfa
     , scalpel
     , selda
     , selda-json
@@ -107,14 +113,17 @@ test-suite SpidingShSz-test
     , bytestring
     , case-insensitive
     , connection
+    , directory
     , errors
     , http-client
     , http-client-tls
     , http-types
     , mtl
     , network
+    , process
     , regex-base
     , regex-posix
+    , regex-tdfa
     , scalpel
     , selda
     , selda-json

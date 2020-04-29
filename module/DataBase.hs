@@ -13,7 +13,7 @@ module DataBase (
     defaultStock,
     defaultBonusInfo,
     defaultAllotmentInfo,
-    testPg
+    getStockCodes,
 ) where
 
 import Database.Selda   --proxychains stack install selda-0.4.0.0
@@ -29,6 +29,10 @@ import Database.Selda.Backend.Internal
 import Debug.Trace
 import Control.Monad
 import Data.Data
+
+import System.Directory
+import Text.Regex.TDFA
+import qualified Data.List  as DL
 
 data Stock = Stock  -- the field member name must be exact same with field of table in database which already exist
 -- order no matter, just parts no matter, only name and type matter
@@ -398,3 +402,13 @@ saveAllotmentInfo aT = do
   --traceM $ "upsert " ++ show num ++ " rows"
   seldaClose pgCon
   --traceM $ "inserted " <> show num <> " rows"
+
+-- getStockCodes "./module/sinaCodes"
+getStockCodes :: FilePath -> IO [String]
+getStockCodes fp = do
+  flist <-listDirectory fp
+  traverse return $ DL.sort . DL.filter rmShitStock . fmap  matchCode $ flist
+  where
+    --  just fucking weird , :: could not pass, must use @ typeApplication
+    matchCode file =  (=~) @FilePath @String @String  file  "[0-9]+"
+    rmShitStock code = not $ (=~) @String @String @Bool code "^2|^3|^9"
