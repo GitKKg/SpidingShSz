@@ -45,6 +45,8 @@ dependencies:
 - directory
 - process
 - regex-tdfa
+- time
+- extra
 
 library:
   source-dirs: module

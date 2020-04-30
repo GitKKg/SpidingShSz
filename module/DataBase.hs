@@ -411,6 +411,6 @@ getStockCodes fp = do
   where
     --  just fucking weird , :: could not pass, must use @ typeApplication
     matchCode file =  (=~) @FilePath @String @String  file  "[0-9]+"
-    rmShitStock code = not $ (=~) @String @String @Bool code "^2|^3|^9"
+    rmShitStock code = not $ (=~) @String @String @Bool code "^2|^3|^9|^010^019|^1|^4|^5|^7|^8"
     -- another way, use negative match
     --rmShitStock code =  (=~) @String @String @Bool code "^[^(2|3|9)]"

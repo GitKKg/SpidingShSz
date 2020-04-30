@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 29ff81193f96aea735350c5527e210db850aa53c3ff95849987bfe0797dae419
+-- hash: 0ce5dea138dc7cd3a02c9f4de52041708493a1b5c3d1827f5997f0ac115a1289
 
 name:           SpidingShSz
 version:        0.1.0.0
@@ -42,6 +42,7 @@ library
     , connection
     , directory
     , errors
+    , extra
     , http-client
     , http-client-tls
     , http-types
@@ -59,6 +60,7 @@ library
     , tagsoup
     , text
     , text-icu
+    , time
     , transformers
     , transformers-either
   default-language: Haskell2010
@@ -78,6 +80,7 @@ executable SpidingShSz
     , connection
     , directory
     , errors
+    , extra
     , http-client
     , http-client-tls
     , http-types
@@ -95,6 +98,7 @@ executable SpidingShSz
     , tagsoup
     , text
     , text-icu
+    , time
     , transformers
     , transformers-either
   default-language: Haskell2010
@@ -115,6 +119,7 @@ test-suite SpidingShSz-test
     , connection
     , directory
     , errors
+    , extra
     , http-client
     , http-client-tls
     , http-types
@@ -132,6 +137,7 @@ test-suite SpidingShSz-test
     , tagsoup
     , text
     , text-icu
+    , time
     , transformers
     , transformers-either
   default-language: Haskell2010
