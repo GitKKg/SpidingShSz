@@ -1,5 +1,5 @@
 {-# LANGUAGE TypeApplications #-}
-{-#  LANGUAGE  DuplicateRecordFields #-}
+{-# LANGUAGE DuplicateRecordFields #-}
 module Main (
   main
             ) where
@@ -70,6 +70,7 @@ getCYSList fp sy ss ey es =  do
     
 --gps= onePagePrice mp code year season >>= saveStockPrice
 -- onePageRight mp code >>= saveBonusInfo . lefts
+gpsDemo = onePagePrice (Just 5678) "000001" 2020 1 >>= saveStockPrice
 
 -- get rightInfo and Save to DataBase,demo
 grsDemo = do

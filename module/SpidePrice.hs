@@ -113,6 +113,7 @@ data1OrData2 = makeRegex ("^$|dbrow" :: String) :: Regex -- must specify type no
 onePagePrice :: Maybe PortNumber -> String -> Int -> Int -> IO [Stock] --"000001" 2020 01
 onePagePrice mp stockCode year season = do
   --let v2managerSetting = mkManagerSettings tlsSetting (Just proxySetting)
+  traceM $ "onePagePrice,Stock code is " ++ stockCode
   systemManager <- newManager $
     if isJust mp
     then mkManagerSettings tlsSetting (Just $ SockSettingsSimple hostAddr (fromJust mp))
@@ -158,7 +159,7 @@ onePagePrice mp stockCode year season = do
 -- use trace to print debug info inside a monad which have no monadtrans and no exporting value structor 
               -- trace ("date is " ++ show date) $ return date
               -- traceM is more simple
-              traceM $ "date is " ++ show date
+              -- traceM $ "date is " ++ show date
               
               open <- floorFloatToInt . (read :: String -> Float) .removeComma . L8.unpack <$> (seekNext $ text "td") 
               high <- floorFloatToInt . (read :: String -> Float) .removeComma . L8.unpack <$> (seekNext $ text "td")
