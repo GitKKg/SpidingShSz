@@ -4,7 +4,7 @@ module SpidePrice
     ( someFunc,
       printStockName,
       stock163URL,
-      onePageData,
+      onePagePrice,
       pm,
       mncal
     )
@@ -110,8 +110,8 @@ stockTab =  "div" @: [hasClass "inner_box"] // "table" @:[AttributeString "class
 data1OrData2 = makeRegex ("^$|dbrow" :: String) :: Regex -- must specify type notation "String" or else complier will complain
 
 -- proxy port, stock code, year, season
-onePageData :: Maybe PortNumber -> String -> Int -> Int -> IO [Stock] --"000001" 2020 01
-onePageData mp stockCode year season = do
+onePagePrice :: Maybe PortNumber -> String -> Int -> Int -> IO [Stock] --"000001" 2020 01
+onePagePrice mp stockCode year season = do
   --let v2managerSetting = mkManagerSettings tlsSetting (Just proxySetting)
   systemManager <- newManager $
     if isJust mp

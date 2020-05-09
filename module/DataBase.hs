@@ -14,6 +14,9 @@ module DataBase (
     defaultBonusInfo,
     defaultAllotmentInfo,
     getStockCodes,
+    saveStockPrice,
+    saveBonusInfo,
+    saveAllotmentInfo
 ) where
 
 import Database.Selda   --proxychains stack install selda-0.4.0.0
@@ -270,7 +273,7 @@ saveStockPrice stockData = do
                   -- for selda get no insert or ignore api
                   tryCreateTable stockPriceT
                   --insert stockPriceT stockData -- all inserted or none
-                  liftIO $ getLine -- test exception
+                  -- liftIO $ getLine -- test exception
                   queryInto stockPriceT $ do
                     sdata <- select tempSPt
                     restrict (not_ $ (sdata ! #_code ) `isIn` (#_code  `from` select stockPriceT) .&& (sdata ! #_date ) `isIn` (#_date  `from` select stockPriceT) )
@@ -325,7 +328,7 @@ saveBonusInfo bT = do
                   -- for selda get no insert or ignore api
                   tryCreateTable bonusInfoT
                   --insert stockPriceT stockData -- all inserted or none
-                  liftIO $ getLine -- test exception
+                  -- liftIO $ getLine -- test exception
                   queryInto bonusInfoT $ do
                     sdata <- select tempBt
                     restrict (not_ $ (sdata ! #_codeB) `isIn` (#_codeB  `from` select bonusInfoT) .&& (sdata ! #_announceDateB ) `isIn` (#_announceDateB `from` select bonusInfoT) )
@@ -379,7 +382,7 @@ saveAllotmentInfo aT = do
                   -- for selda get no insert or ignore api
                   tryCreateTable allotmentT
                   --insert stockPriceT stockData -- all inserted or none
-                  liftIO $ getLine -- test exception
+                  -- liftIO $ getLine -- test exception
                   queryInto allotmentT $ do
                     sdata <- select tempAt
                     restrict (not_ $ (sdata ! #_codeA) `isIn` (#_codeA  `from` select allotmentT) .&& (sdata ! #_announceDateA ) `isIn` (#_announceDateA `from` select allotmentT) )

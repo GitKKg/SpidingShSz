@@ -121,8 +121,8 @@ allotmentRow = allotmentTab // "tbody" `atDepth` 1 // "tr" `atDepth` 1
 instance Semigroup a => Semigroup (Scraper r a) where
   sa <> sb = fmap (<>) sa  <*> sb
 
-getData :: Maybe PortNumber -> String -> IO [RightInfo]
-getData mp code = do
+onePageRight :: Maybe PortNumber -> String -> IO [RightInfo]
+onePageRight mp code = do
   --let v2managerSetting = mkManagerSettings tlsSetting (Just proxySetting)
   systemManager <- newManager $
     if isJust mp
@@ -143,7 +143,7 @@ getData mp code = do
           
   responseSinaNoHead <- getpage
   
-  putStrLn $ "The Bing status code was: " ++ (show $ statusCode $ responseStatus responseSinaNoHead)
+  putStrLn $ "The Sina status code was: " ++ (show $ statusCode $ responseStatus responseSinaNoHead)
   gbk <- ICU.open "gbk" Nothing
   let txt :: Text
       txt = ICU.toUnicode gbk $ L8.toStrict $ responseBody responseSinaNoHead
@@ -176,14 +176,14 @@ getData mp code = do
           inSerial $ do
             --traceM $ "name is " ++ (T.unpack .decodeUtf8.L8.toStrict)  name
             announceDateB <-  (read :: String -> Int) . dateToNum . L8.unpack  <$> (seekNext $ text "td")
-            traceM $ "announeDateB is " ++ show announceDateB
+            --traceM $ "announeDateB is " ++ show announceDateB
             bonusSharesRatio <- floorFloatToInt . (read :: String -> Float) .removeComma . L8.unpack <$> (seekNext $ text "td")
-            traceM $ "bonusSharesRatio is " ++ show bonusSharesRatio
+            --traceM $ "bonusSharesRatio is " ++ show bonusSharesRatio
             sharesTranscent <- floorFloatToInt . (read :: String -> Float) .removeComma . L8.unpack <$> (seekNext $ text "td")
             dividend <- floorFloatToInt . (read :: String -> Float) .removeComma . L8.unpack <$> (seekNext $ text "td")
             process <-  decodeUtf8 . L8.toStrict <$> (seekNext $ text "td")
-            traceM $ "process is " ++ T.unpack process
-            traceM $ "process is 实施 is " ++ show (T.unpack process == "实施")
+            --traceM $ "process is " ++ T.unpack process
+            --traceM $ "process is 实施 is " ++ show (T.unpack process == "实施")
             exRightDateB <- -- don't think do while in monad do sugar,all these name on left of <- are just parameters in every layer of monad >>= functions chain
               if (T.unpack process == "实施")
               then  readCaus <$> (seekNext $ text "td")
@@ -199,9 +199,9 @@ getData mp code = do
             --                (read :: String -> Int) . dateToNum . L8.unpack  <$> (seekNext $ text "td")) -- betweeb two seekNexts ,get no monad >>= relationship,so not contionus,not you want
             --   else return (return 0,return 0)
               
-            traceM $ "exRightDateB is " ++ show  exRightDateB
-            traceM $ "recordDateB is " ++ show recordDateB
-            traceM $ "B Table,Stock name is " ++ (T.unpack .decodeUtf8.L8.toStrict)  name
+            --traceM $ "exRightDateB is " ++ show  exRightDateB
+            --traceM $ "recordDateB is " ++ show recordDateB
+            --traceM $ "B Table,Stock name is " ++ (T.unpack .decodeUtf8.L8.toStrict)  name
             return defaultBonusInfo {
               _codeB = pack code,
               _nameB = decodeUtf8 . L8.toStrict $ name,
@@ -229,14 +229,14 @@ getData mp code = do
             announceDateA <- readCaus  <$> (seekNext $ text "td")
             guard (announceDateA /= 0)
             
-            traceM $ "announeDateA is " ++ show announceDateA
+            --traceM $ "announeDateA is " ++ show announceDateA
             allotRatio <- floorFloatToInt . (read :: String -> Float) .removeComma . L8.unpack <$> (seekNext $ text "td")
-            traceM $ "allotRatio is " ++ show allotRatio
+            --traceM $ "allotRatio is " ++ show allotRatio
             offerPrice <- floorFloatToInt . (read :: String -> Float) .removeComma . L8.unpack <$> (seekNext $ text "td")
             capStock <- floorFloatToInt . (read :: String -> Float) .removeComma . L8.unpack <$> (seekNext $ text "td")
             exRightDateA <- readCaus  <$> (seekNext $ text "td")
             recordDateA <- readCaus  <$> (seekNext $ text "td")
-            traceM $ "A Table,Stock name is " ++ (T.unpack .decodeUtf8.L8.toStrict)  name
+            --traceM $ "A Table,Stock name is " ++ (T.unpack .decodeUtf8.L8.toStrict)  name
             return defaultAllotmentInfo {
               _codeA = pack code,
               _nameA = decodeUtf8 . L8.toStrict $ name,

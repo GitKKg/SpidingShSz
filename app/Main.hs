@@ -16,6 +16,10 @@ import Data.Tuple.Extra
 
 import Control.Monad
 
+import Control.Concurrent
+
+import Data.Either
+
 main :: IO ()
 main = someFunc
 
@@ -63,4 +67,15 @@ getCYSList fp sy ss ey es =  do
   return . join $ fmap codeList ysList
   where
     oneCYS ys code = (code,fst ys,snd ys)
+    
+--gps= onePagePrice mp code year season >>= saveStockPrice
+-- onePageRight mp code >>= saveBonusInfo . lefts
 
+-- get rightInfo and Save to DataBase,demo
+grsDemo = do
+  orInfo <- onePageRight (Just 5678) "000002" -- if don't demonad here,it will be calculated twice in below 
+  (>>) <$> (saveBonusInfo . lefts ) <*> (saveAllotmentInfo . rights ) $ orInfo
+  -- (>>) <$> (saveBonusInfo . lefts =<< ) <*> (saveAllotmentInfo . rights =<< ) $ onePageRight (Just 5678) "000001" --- onePageRight is inside IO, will be calulated twice here,not you want
+  
+-- MVar [(code,year,season)]
+-- one thread get one mp, Maybe PortNumber, take one (code,year,season) from head of MVar List,then putMVar tail of List,so ,these multi-thread cocurrent like this way,when head List is empty,thread putMVar exit to notify main it is ok,when all threads are ok,main ok,out 
