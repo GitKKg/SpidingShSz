@@ -21,7 +21,6 @@ import Control.Concurrent
 import Data.Either
 
 main :: IO ()
-main = someFunc
 
 type StartYear = Int
 type StartSeason = Int
@@ -80,3 +79,19 @@ grsDemo = do
   
 -- MVar [(code,year,season)]
 -- one thread get one mp, Maybe PortNumber, take one (code,year,season) from head of MVar List,then putMVar tail of List,so ,these multi-thread cocurrent like this way,when head List is empty,thread putMVar exit to notify main it is ok,when all threads are ok,main ok,out 
+
+main = someFunc
+-- main = do
+--   print "input code path,start year,season,end year,season \n"
+--   fp <- read @String <$>  getLine
+--   sy <- read @Int <$>  getLine
+--   ss <- read @Int <$>  getLine
+--   ey <- read @Int <$>  getLine
+--   es <- read @Int <$>  getLine
+--   synM <- newEmptyMVar
+--   cysList <- getCYSList fp sy ss ey es
+--   cysMList <- newMVar cysList
+--   fmap (forkIO . threadWork cysMList) portList where
+--     threadWork port = do
+--       cysListNow <- takeMVar cysMList
+--       return ()
