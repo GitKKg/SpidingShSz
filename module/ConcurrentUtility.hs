@@ -35,9 +35,9 @@ testMvList = do
   syncM <- newEmptyMVar
   mlist <- newMVar [1..103]
   let threadList = ["a","b","c","d","e"]
-  traverse (forkIO . threadWork syncM mlist) threadList
-  -- traverse (\_ -> takeMVar syncM) threadList -- this make dead loop,why?
-  takeMVar syncM
+  mapM (forkIO . threadWork syncM mlist) threadList
+  mapM (\_ -> takeMVar syncM) threadList -- this make dead loop,why?,because below thread not putMVar mlist back
+  --takeMVar syncM
   print "main over"
   where
     threadWork syncM mlist str =  do
@@ -46,6 +46,7 @@ testMvList = do
         then do
         putStrLn $ str ++  " out for list is empty"
         putMVar syncM str
+        putMVar mlist list -- if not put back,other thread will block
         else do
         print $ str ++ " get " ++ (show . head) list
         putMVar mlist (tail list)

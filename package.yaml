@@ -47,6 +47,7 @@ dependencies:
 - regex-tdfa
 - time
 - extra
+- unix
 
 library:
   source-dirs: module
