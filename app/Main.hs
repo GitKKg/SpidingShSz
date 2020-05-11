@@ -20,6 +20,8 @@ import Control.Concurrent
 
 import Data.Either
 
+import ConcurrentUtility
+
 main :: IO ()
 
 type StartYear = Int
@@ -80,7 +82,7 @@ grsDemo = do
 -- MVar [(code,year,season)]
 -- one thread get one mp, Maybe PortNumber, take one (code,year,season) from head of MVar List,then putMVar tail of List,so ,these multi-thread cocurrent like this way,when head List is empty,thread putMVar exit to notify main it is ok,when all threads are ok,main ok,out 
 
-main = someFunc
+main = testMvList--someFunc
 -- main = do
 --   print "input code path,start year,season,end year,season \n"
 --   fp <- read @String <$>  getLine

@@ -9,6 +9,9 @@ import Text.Printf
 
 import System.Posix.Process.ByteString
 
+import System.Directory
+import System.IO
+
 test = do
   hSetBuffering stdout NoBuffering
   forkIO $ (replicateM_ 100 ) (putChar 'A')
@@ -32,6 +35,9 @@ setReminder s = do
   getProcessID >>= print
 
 testMvList = do
+  -- a run before b in ... <$> a <*> b $ ... as shown below
+  (>>=) <$> doesDirectoryExist <*>  ((flip when) . removeDirectoryRecursive)  $ "./log"
+  createDirectoryIfMissing True "./log"
   syncM <- newEmptyMVar
   mlist <- newMVar [1..103]
   let threadList = ["a","b","c","d","e"]
@@ -41,13 +47,18 @@ testMvList = do
   print "main over"
   where
     threadWork syncM mlist str =  do
+      id <- myThreadId
+      let log = "./log/" ++ ((!! 1) . words . show) id ++ "log.txt"
+      fileExist <- doesFileExist $ log
+      when (not fileExist) $ openFile log WriteMode >>= hClose
       list <-takeMVar mlist
       if null list
-        then do
-        putStrLn $ str ++  " out for list is empty"
-        putMVar syncM str
+      then do
+        (>>) <$> appendFile log <*> putStrLn $ str ++  " out for list is empty \n"
         putMVar mlist list -- if not put back,other thread will block
-        else do
-        print $ str ++ " get " ++ (show . head) list
+        putMVar syncM str
+      else do
+        (>>) <$> appendFile log <*> putStrLn $ str ++ " get " ++ (show . head) list ++ "\n"
+        myThreadId >>= print
         putMVar mlist (tail list)
         threadWork syncM mlist str
