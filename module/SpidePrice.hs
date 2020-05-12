@@ -1,12 +1,8 @@
 {-# LANGUAGE OverloadedStrings ,TypeApplications #-}
 
 module SpidePrice
-    ( someFunc,
-      printStockName,
-      stock163URL,
-      onePagePrice,
-      pm,
-      mncal
+    (
+      onePagePrice
     )
 where
 
@@ -71,6 +67,8 @@ import Control.Monad.Trans.Either
 
 import Control.Concurrent
 
+import DebugLogM
+
 -- Either is monad, and >> chain of Either will break at the 1st Left,so could use this feature to exit in advance
 -- ExceptT too, as monad transformer, could use lift,lifIO to bring try ,catch such exception io inside,so as to wrap your routine will induce exception in ExcepT monad chain >> block, make Except monad block exit at once when encounter first exception you specifying, and you get return calue inside Left,if no exception at all, you get return value in Right
 -- MaybeT is similar,but just return Nothing when exit due to exception,return Just xx when finished normally
@@ -78,15 +76,14 @@ import Control.Concurrent
 mayForEver = runMaybeT $ forever $  do
     str <- lift getLine
     when (str == "exit") $ liftIO (print "exit") >> mzero
-    traceM $ "continue"
+    logOutM $ "continue\n"
 
 ex2 = runExceptT $ forever $ do
   str <- lift getLine
   when (str == "exit") $ left 1 -- only left will make loop exit, but right will continue loop
-  liftIO $ print "continue"
+  liftIO $ print "continue\n"
     
-someFunc :: IO ()
-someFunc = putStrLn "someFunc"
+
 
 tlsSetting = TLSSettingsSimple False False False -- import Network.Connection
 hostAddr = "127.0.0.1" :: HostName -- import Network.Socket
@@ -113,7 +110,7 @@ data1OrData2 = makeRegex ("^$|dbrow" :: String) :: Regex -- must specify type no
 onePagePrice :: Maybe PortNumber -> String -> Int -> Int -> IO [Stock] --"000001" 2020 01
 onePagePrice mp stockCode year season = do
   --let v2managerSetting = mkManagerSettings tlsSetting (Just proxySetting)
-  traceM $ "onePagePrice,Stock code is " ++ stockCode
+  logOutM $ "onePagePrice,Stock code is " ++ stockCode ++ "port is " ++ show mp ++ "\n"
   systemManager <- newManager $
     if isJust mp
     then mkManagerSettings tlsSetting (Just $ SockSettingsSimple hostAddr (fromJust mp))
@@ -125,18 +122,25 @@ onePagePrice mp stockCode year season = do
         eResponse <- try @SomeException  $ httpLbs request163NoHead systemManager
         case eResponse of
           Left e -> do
-            traceM $ "exception! is \n" ++ show e ++ "\nstop onePageData!"
-            traceM $ "wait for 1s,repeat again \n"
+            logOutM $ "exception! is \n" ++ show e ++ "\nstop onePageData!\n"
+            logOutM $ "wait for 1s,repeat again \n"
             threadDelay 1000000
             getpage -- mzero make you exit onePageData in advance
           Right response ->  return response
           
   response163NoHead <- getpage 
   
-  traceM $ "get Pages!\n"
+  logOutM $ "get Pages!\n"
   -- be hold! sometime will get invalid data ,need handling  
   -- Exception: Maybe.fromJust: Nothing
-  traverse return . fromJust $ scrapeStringLike (responseBody response163NoHead)  stockScraper
+  eStock <- try @SomeException $traverse return . fromJust $ scrapeStringLike (responseBody response163NoHead)  stockScraper
+  case eStock of
+          Left e -> do
+            logOutM $ "exception when parsing! is \n" ++ show e ++ "\n it seems baned by 163!\n"
+            logOutM $ "wait for 5 mins,repeat again \n"
+            threadDelay $ 1000000*60*5
+            onePagePrice mp stockCode year season 
+          Right stock ->  return stock
   --print stockA
   --return stockA
   where

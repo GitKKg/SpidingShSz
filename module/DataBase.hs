@@ -37,6 +37,8 @@ import System.Directory
 import Text.Regex.TDFA
 import qualified Data.List  as DL
 
+import DebugLogM
+
 data Stock = Stock  -- the field member name must be exact same with field of table in database which already exist
 -- order no matter, just parts no matter, only name and type matter
   {
@@ -254,7 +256,7 @@ tempSPt = table "tempSPt" [#_code :+ #_date :- unique]
 
 saveStockPrice :: [Stock] -> IO()
 saveStockPrice stockData = do
-  traceM $ "saveStockPrice,Stock code is " ++ (unpack .(_code :: Stock -> Text) .DL.head) stockData
+  logOutM $ "saveStockPrice,Stock code is " ++ (unpack .(_code :: Stock -> Text) .DL.head) stockData
   pgCon <- pgOpen pgConnectInfo
   -- num <- runSeldaT (do
   --                      tryCreateTable stockPriceT
@@ -268,7 +270,7 @@ saveStockPrice stockData = do
                        insert tempSPt stockData
                    )
          pgCon
-  traceM $ "inserted " ++ show num ++ " rows into temp table\n"
+  logOutM $ "inserted " ++ show num ++ " rows into temp table\n"
   enum <- try @SeldaError $
     runSeldaT (do -- insert into temp table,then queryInto stock table
                   -- for selda get no insert or ignore api
@@ -283,14 +285,14 @@ saveStockPrice stockData = do
     pgCon
   num <- case enum of
     Left e ->  do
-      traceM $ "exception : \n" ++ show e ++ ",\njust return 0"
+      logOutM $ "exception : \n" ++ show e ++ ",\njust return 0"
       -- strictly speaking, for safety if we don't use withPostgreSQL, we need handle every serious exception exit such as DbError 
       if toConstr e == toConstr ( DbError "anything")
-        then (traceM $ "Database issue!Stop program!\n") >> seldaClose pgCon >> mzero
+        then (logOutM $ "Database issue!Stop program!\n") >> seldaClose pgCon >> mzero
         -- actually don't need seldaClose,selda will close automatically
         else runSeldaT (dropTable tempSPt) pgCon >> return 0
     Right n -> return n
-  traceM $ "queryInto " ++ show num ++ " rows\n"
+  logOutM $ "queryInto " ++ show num ++ " rows\n"
   runSeldaT (tryDropTable tempSPt) pgCon
   --traceM $ "1st time ,inserted " <> show num <> " rows"
   --num <- runSeldaT (upsert stockPriceT (\_ -> literal True) (\row -> row ) stockData) pgCon
@@ -323,7 +325,7 @@ saveBonusInfo bT = do
                        insert tempBt bT
                    )
          pgCon
-  traceM $ "inserted " ++ show num ++ " rows into temp table\n"
+  logOutM $ "inserted " ++ show num ++ " rows into temp table\n"
   enum <- try @SeldaError $
     runSeldaT (do -- insert into temp table,then queryInto stock table
                   -- for selda get no insert or ignore api
@@ -338,14 +340,14 @@ saveBonusInfo bT = do
     pgCon
   num <- case enum of
     Left e ->  do
-      traceM $ "exception : \n" ++ show e ++ ",\njust return 0"
+      logOutM $ "exception : \n" ++ show e ++ ",\njust return 0"
       -- strictly speaking, for safety if we don't use withPostgreSQL, we need handle every serious exception exit such as DbError 
       if toConstr e == toConstr ( DbError "anything")
-        then (traceM $ "Database issue!Stop program!\n") >> seldaClose pgCon >> mzero
+        then (logOutM $ "Database issue!Stop program!\n") >> seldaClose pgCon >> mzero
         -- actually don't need seldaClose,selda will close automatically
         else runSeldaT (dropTable tempBt) pgCon >> return 0
     Right n -> return n
-  traceM $ "queryInto " ++ show num ++ " rows\n"
+  logOutM $ "queryInto " ++ show num ++ " rows\n"
   runSeldaT (tryDropTable tempBt) pgCon
   --traceM $ "1st time ,inserted " <> show num <> " rows"
   --num <- runSeldaT (upsert stockPriceT (\_ -> literal True) (\row -> row ) stockData) pgCon
@@ -377,7 +379,7 @@ saveAllotmentInfo aT = do
                        insert tempAt aT
                    )
          pgCon
-  traceM $ "inserted " ++ show num ++ " rows into temp table\n"
+  logOutM $ "inserted " ++ show num ++ " rows into temp table\n"
   enum <- try @SeldaError $
     runSeldaT (do -- insert into temp table,then queryInto stock table
                   -- for selda get no insert or ignore api
@@ -392,14 +394,14 @@ saveAllotmentInfo aT = do
     pgCon
   num <- case enum of
     Left e ->  do
-      traceM $ "exception : \n" ++ show e ++ ",\njust return 0"
+      logOutM $ "exception : \n" ++ show e ++ ",\njust return 0"
       -- strictly speaking, for safety if we don't use withPostgreSQL, we need handle every serious exception exit such as DbError 
       if toConstr e == toConstr ( DbError "anything")
-        then (traceM $ "Database issue!Stop program!\n") >> seldaClose pgCon >> mzero
+        then (logOutM $ "Database issue!Stop program!\n") >> seldaClose pgCon >> mzero
         -- actually don't need seldaClose,selda will close automatically
         else runSeldaT (dropTable tempAt) pgCon >> return 0
     Right n -> return n
-  traceM $ "queryInto " ++ show num ++ " rows\n"
+  logOutM $ "queryInto " ++ show num ++ " rows\n"
   runSeldaT (tryDropTable tempAt) pgCon
   --traceM $ "1st time ,inserted " <> show num <> " rows"
   --num <- runSeldaT (upsert stockPriceT (\_ -> literal True) (\row -> row ) stockData) pgCon

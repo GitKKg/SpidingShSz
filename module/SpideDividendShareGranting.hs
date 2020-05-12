@@ -58,6 +58,8 @@ import Text.Read
 
 import Control.Concurrent
 
+import DebugLogM
+
 -- http://money.finance.sina.com.cn/corp/go.php/vISSUE_ShareBonus/stockid/002166.phtml
 sinaURL :: String ->String
 sinaURL code = "http://money.finance.sina.com.cn/corp/go.php/vISSUE_ShareBonus/stockid/"
@@ -128,30 +130,39 @@ onePageRight mp code = do
     if isJust mp
     then mkManagerSettings tlsSetting (Just $ SockSettingsSimple hostAddr (fromJust mp))
     else tlsManagerSettings
-    
+  logOutM $ "spiding " ++ code ++ "right info with " ++ show mp ++ "\n"
   requestSinaNoHead <- parseRequest $ sinaURL code
   let getpage = do
         -- TypeApplications make you type less words, use @ !
         eResponse <- try @SomeException  $ httpLbs requestSinaNoHead systemManager
         case eResponse of
           Left e -> do
-            traceM $ "Sina exception! is \n" ++ show e ++ "\nstop onePageData!"
-            traceM $ "wait for 1s,repeat again \n"
+            logOutM $ "Sina exception! is \n" ++ show e ++ "\nstop onePageData!"
+            logOutM $ "wait for 1s,repeat again \n"
             threadDelay 1000000
             getpage -- mzero make you exit onePageData in advance
           Right response ->  return response
           
   responseSinaNoHead <- getpage
-  
-  putStrLn $ "The Sina status code was: " ++ (show $ statusCode $ responseStatus responseSinaNoHead)
+
+  logOutM $ "get Page!\n"
+  --putStrLn $ "The Sina status code was: " ++ (show $ statusCode $ responseStatus responseSinaNoHead)
   gbk <- ICU.open "gbk" Nothing
   let txt :: Text
       txt = ICU.toUnicode gbk $ L8.toStrict $ responseBody responseSinaNoHead
   -- T.putStrLn txt
   -- 万科A
   let gbkPage = L8.fromStrict . encodeUtf8 $ txt
-  traverse print . fromJust $ scrapeStringLike gbkPage stockScraper
-  traverse return . fromJust $ scrapeStringLike gbkPage stockScraper
+  let rightList = scrapeStringLike gbkPage stockScraper
+  eRight <- try @SomeException $ traverse return . fromJust $ rightList
+  case eRight of
+          Left e -> do
+            logOutM $ "exception when parsing! is \n" ++ show e ++ "\n it seems baned by sina!\n"
+            logOutM $ "wait for 5 mins,repeat again \n"
+            threadDelay $ 1000000*60*5
+            onePageRight mp code
+          Right right -> traverse print right >> return right
+  -- traverse return . fromJust $ scrapeStringLike gbkPage stockScraper
   
   -- new topic, how to parallelly pass 2 parameters inside monad into 2 monad
   -- first to figure out how to pass 2 parameters into 1 monad:

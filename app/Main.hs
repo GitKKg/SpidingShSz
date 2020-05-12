@@ -89,7 +89,10 @@ grsDemo = do
 --wmain :: StartYear -> StartSeason -> EndYear -> EndSeason -> FilePath -> IO()
 --logOut :: String -> IO ()
 logOut log = (>>) <$> liftIO . (appendFile log) <*> traceM
-main = do --testMvList--someFunc
+
+-- how to set args for main in GHCI
+-- :set args 2009 4 2019  1 "./module/sinaCodes"
+main = do
   args <- getArgs
   let sy = read @StartYear $ args!!0
   traceM $ show sy
