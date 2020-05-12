@@ -58,6 +58,7 @@ extra-deps:
   - time-1.8.0.2
   - extra-1.7.1
   - unix-2.7.2.2
+  - containers-0.6.0.1
   
 # Override default flag values for local packages and extra-deps
 # flags: {}

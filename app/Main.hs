@@ -127,8 +127,10 @@ main = do
         putMVar mlist list -- if not put back,other thread will block
         putMVar syncM 'x'
         else do
+        let (code,year,season) = head list
         logOut log $ show id ++ " get " ++ (show . head) list ++ "\n"
         putMVar mlist (tail list)
+        onePagePrice mayPort code year season >>= saveStockPrice
         threadWork syncM mlist mayPort
 -- main = do
 --   print "input code path,start year,season,end year,season \n"

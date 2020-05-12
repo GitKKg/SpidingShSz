@@ -39,6 +39,9 @@ import qualified Data.List  as DL
 
 import DebugLogM
 
+import qualified Data.Set as DS 
+
+
 data Stock = Stock  -- the field member name must be exact same with field of table in database which already exist
 -- order no matter, just parts no matter, only name and type matter
   {
@@ -413,7 +416,8 @@ saveAllotmentInfo aT = do
 getStockCodes :: FilePath -> IO [String]
 getStockCodes fp = do
   flist <-listDirectory fp
-  traverse return $ DL.sort . DL.filter rmShitStock . fmap  matchCode $ flist
+  -- use DS to make deduplication,just like python ever did
+  traverse return $ DS.toList . DS.fromList. DL.sort . DL.filter rmShitStock . fmap  matchCode $ flist
   where
     --  just fucking weird , :: could not pass, must use @ typeApplication
     matchCode file =  (=~) @FilePath @String @String  file  "[0-9]+"
