@@ -69,6 +69,8 @@ import Control.Concurrent
 
 import DebugLogM
 
+import System.Clock
+
 -- Either is monad, and >> chain of Either will break at the 1st Left,so could use this feature to exit in advance
 -- ExceptT too, as monad transformer, could use lift,lifIO to bring try ,catch such exception io inside,so as to wrap your routine will induce exception in ExcepT monad chain >> block, make Except monad block exit at once when encounter first exception you specifying, and you get return calue inside Left,if no exception at all, you get return value in Right
 -- MaybeT is similar,but just return Nothing when exit due to exception,return Just xx when finished normally
@@ -121,7 +123,7 @@ onePagePrice mp stockCode year season = do
         -- TypeApplications make you type less words, use @ !
         eResponse <- try @SomeException  $ httpLbs request163NoHead systemManager
         case eResponse of
-          Left e -> do
+          Left e -> do -- it's timeout in most cases
             logOutM $ "exception! is \n" ++ show e ++ "\nstop onePageData!\n"
             logOutM $ "wait for 1s,repeat again \n"
             threadDelay 1000000

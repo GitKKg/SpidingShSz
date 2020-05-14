@@ -1,5 +1,5 @@
 -- | 
-
+{-# LANGUAGE OverloadedStrings ,TypeApplications #-}
 module DebugLogM where
 
 import Debug.Trace
@@ -8,6 +8,11 @@ import Control.Concurrent
 import System.Directory
 import System.IO
 import Control.Monad
+
+--import Control.Exception
+--import Formatting
+--import Formatting.Clock
+
 
 logOutM str = (>>) <$> logM  <*> traceM $ str
 

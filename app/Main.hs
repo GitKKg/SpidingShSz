@@ -29,6 +29,82 @@ import System.Environment
 import Debug.Trace
 import Control.Monad.Trans
 
+import System.Clock
+
+import Control.Monad.State
+import Control.Monad.State.Lazy
+
+import System.IO.Unsafe
+-- demo for State
+type NameGen = State Int
+
+newName :: State Int String -- state s is Int,and eval output a is String, State s a
+newName = state $ \i -> ("x" ++ show i, i + 1)
+
+-- state can only be passed in Monad way,so must be >> or >>= like series
+x8Name = evalState (newName >> newName >> newName) 6 -- newName is calculated 3 times,and intial state is 6, so state is 6+2 =8, and evalue output a is "x8"
+-- "x8"
+
+nameT :: StateT Int IO String
+nameT = StateT $ \i -> return ("x" ++ show i, i + 1)
+
+x8NameT = runStateT  (nameT >> nameT >> nameT) 6
+
+tickT :: StateT Int IO Int
+tickT = do
+  n <- get
+  traceShowM n
+  put (n+1)
+  return n
+plusT :: Int -> Int -> IO Int
+plusT n x = execStateT (sequence $ replicate n tickT) x
+
+tick :: State Int Int
+tick = do n <- get
+          put (n+1)
+          return n -- State s a, n is a
+          
+plus :: Int -> Int -> Int
+plus n x = execState (sequence $ replicate n tick) x -- here,tick as State ,is evaluated n times in sequence ,so state is already +n
+
+-- a clear IO in StateT demo
+--  use StateT to embed IO inside, for Identity of State get no MonadIO or MonadTrans instance
+-- without  IO could not introduce liftIO and lift,IO get MonadIO and MonadTrans instance
+secS :: StateT  Int IO Int
+secS = do
+  lastSec <- get
+  lift  $  traceM. (++ " second") . ("last time is " ++).show $ lastSec
+  -- let end = getTime Monotonic
+  newSec <-lift $ do
+    end <- getTime Monotonic
+    let newSec = round . (/ (10 ^9)) . fromInteger . toNanoSecs $ end
+    traceShowM newSec
+    return newSec
+  liftIO $ traceM "wait for 2 seconds" >> threadDelay 2000000
+  put newSec
+  --return lastSec
+  secS -- infite loop
+-- execStateT secS 0 
+-- last time is 0 second
+-- 25554
+-- wait for 2 seconds
+-- last time is 25556 second
+-- 25556
+-- wait for 2 seconds
+-- 25558
+-- infite loop ...
+
+  
+timing1s =
+  do start <- getTime Monotonic
+     --evaluate (sum [1 .. 1000000])
+     threadDelay $ 10^6 *2 -- 2s
+     end <- getTime Monotonic
+     --fprint (timeSpecs % "\n") start end
+     return $  fromIntegral (toNanoSecs end - toNanoSecs start) / 10 ^9 -- in  second
+
+
+
 type StartYear = Int
 type StartSeason = Int
 type EndYear = Int
@@ -114,7 +190,7 @@ main = do
   mapM (\_ -> takeMVar syncM) threadList
   print "main over"
   where
-    threadWork syncM mlist mayPort = do
+    threadWork syncM mlist mayPort = do -- evalStateT 
       id <- myThreadId
       let log = "./log/" ++ ((!! 1) . words . show) id ++ "log.txt"
       fileExist <- doesFileExist $ log
@@ -130,19 +206,13 @@ main = do
         let (code,year,season) = head list
         logOut log $ show id ++ " get " ++ (show . head) list ++ "\n"
         putMVar mlist (tail list)
-        onePagePrice mayPort code year season >>= saveStockPrice
+        startT <- getTime Monotonic
+        let startSec = (/10^9) . fromIntegral . toNanoSecs $ startT -- in sec
+        -- evalState
+        onePagePrice  mayPort code year season >>= saveStockPrice
+        --end <- getTime Monotonic
+        --let duration = fromIntegral (toNanoSecs end - toNanoSecs start) / 10 ^9
+        --when (duration < 6) $ threadDelay $ round (6-duration) * 10 ^6 -- wait for at least 6 second to avoid ban
         threadWork syncM mlist mayPort
--- main = do
---   print "input code path,start year,season,end year,season \n"
---   fp <- read @String <$>  getLine
---   sy <- read @Int <$>  getLine
---   ss <- read @Int <$>  getLine
---   ey <- read @Int <$>  getLine
---   es <- read @Int <$>  getLine
---   synM <- newEmptyMVar
---   cysList <- getCYSList fp sy ss ey es
---   cysMList <- newMVar cysList
---   fmap (forkIO . threadWork cysMList) portList where
---     threadWork port = do
---       cysListNow <- takeMVar cysMList
---       return ()
+        
+

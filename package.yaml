@@ -49,6 +49,7 @@ dependencies:
 - extra
 - unix
 - containers
+- clock
 
 library:
   source-dirs: module
