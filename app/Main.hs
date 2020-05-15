@@ -165,7 +165,7 @@ grsDemo = do
 logOut log = (>>) <$> liftIO . (appendFile log) <*> traceM
 
 -- how to set args for main in GHCI
--- :set args 2009 4 2019  1 "./module/sinaCodes"
+-- :set args 2018 4 2019  1 "./module/sinaCodes"
 --threadWorkT :: MVar Char -> MVar [(String , Int,Int)] -> Maybe PortNumber -> StateT Int IO ()
 main = do
   args <- getArgs
@@ -210,17 +210,19 @@ main = do
         putMVar mlist (tail list)
         startT <- getTime Monotonic 
         let startSec = round . (/ (10^9) ) . fromInteger . toNanoSecs $ startT -- in sec
-        logOut log $ "start time is " ++ show startSec
+        logOut log $ "start time is " ++ show startSec ++ "s\n"
         when (startSec - lastSec < 6) $ do
           let waitSec = 6-(startSec- lastSec)
           logOut log $ "less than 6s ,wait for " ++ show waitSec ++ " s\n"
           threadDelay $ waitSec * (10^6)
         -- evalState
-        stockL <- onePagePrice  mayPort code year season
+        stockL <- onePagePrice mayPort code year season
         endT <- getTime Monotonic
         let endSec = round . (/ (10^9) ) . fromInteger . toNanoSecs $ endT
-        logOut log $ "end time is " ++ show endSec ++ " s\n"
-        saveStockPrice stockL
+        logOut log $ "end time is " ++ show endSec ++ "s\n"
+        -- some stock just exit market or not go in public in that time range,so stockL maybe null
+        -- for example, 000022,when 2019 exit market
+        when (not . null $ stockL) $ saveStockPrice stockL
         --end <- getTime Monotonic
         --let duration = fromIntegral (toNanoSecs end - toNanoSecs start) / 10 ^9
         --when (duration < 6) $ threadDelay $ round (6-duration) * 10 ^6 -- wait for at least 6 second to avoid ban

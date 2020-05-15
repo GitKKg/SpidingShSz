@@ -259,7 +259,7 @@ tempSPt = table "tempSPt" [#_code :+ #_date :- unique]
 
 saveStockPrice :: [Stock] -> IO()
 saveStockPrice stockData = do
-  logOutM $ "saveStockPrice,Stock code is " ++ (unpack .(_code :: Stock -> Text) .DL.head) stockData
+  logOutM $ "saveStockPrice,Stock code is " ++ (unpack .(_code :: Stock -> Text) .DL.head) stockData ++ "\n"
   pgCon <- pgOpen pgConnectInfo
   -- num <- runSeldaT (do
   --                      tryCreateTable stockPriceT

@@ -112,7 +112,7 @@ data1OrData2 = makeRegex ("^$|dbrow" :: String) :: Regex -- must specify type no
 onePagePrice :: Maybe PortNumber -> String -> Int -> Int -> IO [Stock] --"000001" 2020 01
 onePagePrice mp stockCode year season = do
   --let v2managerSetting = mkManagerSettings tlsSetting (Just proxySetting)
-  logOutM $ "onePagePrice,Stock code is " ++ stockCode ++ "port is " ++ show mp ++ "\n"
+  logOutM $ "onePagePrice,Stock code is " ++ stockCode ++ ",port is " ++ show mp ++ "\n"
   systemManager <- newManager $
     if isJust mp
     then mkManagerSettings tlsSetting (Just $ SockSettingsSimple hostAddr (fromJust mp))
