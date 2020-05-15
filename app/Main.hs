@@ -70,14 +70,14 @@ plus n x = execState (sequence $ replicate n tick) x -- here,tick as State ,is e
 -- a clear IO in StateT demo
 --  use StateT to embed IO inside, for Identity of State get no MonadIO or MonadTrans instance
 -- without  IO could not introduce liftIO and lift,IO get MonadIO and MonadTrans instance
-secS :: StateT  Int IO Int
+secS :: StateT Int IO Int
 secS = do
   lastSec <- get
   lift  $  traceM. (++ " second") . ("last time is " ++).show $ lastSec
   -- let end = getTime Monotonic
   newSec <-lift $ do
     end <- getTime Monotonic
-    let newSec = round . (/ (10 ^9)) . fromInteger . toNanoSecs $ end
+    let newSec = round . (/ 10 ^9 ) . fromInteger . toNanoSecs $ end
     traceShowM newSec
     return newSec
   liftIO $ traceM "wait for 2 seconds" >> threadDelay 2000000
@@ -101,9 +101,7 @@ timing1s =
      threadDelay $ 10^6 *2 -- 2s
      end <- getTime Monotonic
      --fprint (timeSpecs % "\n") start end
-     return $  fromIntegral (toNanoSecs end - toNanoSecs start) / 10 ^9 -- in  second
-
-
+     return $  fromIntegral (toNanoSecs end - toNanoSecs start) / (10 ^9) -- in  second
 
 type StartYear = Int
 type StartSeason = Int
@@ -139,7 +137,7 @@ currentYear :: IO Int -- :: (year,month,day)
 currentYear = getCurrentTime >>= return .fromIntegral @_ @Int . fst3 . toGregorian . utctDay
 
 portList = [Nothing, Just 5678,Just 9001,Just 9002,Just 9003,Just 9004,Just 9005,Just 9006]
-
+--portList = [Just 5678]
 -- "./module/sinaCodes"
 getCYSList :: FilePath -> StartYear -> StartSeason -> EndYear -> EndSeason ->IO [(String,Int,Int)]
 getCYSList fp sy ss ey es =  do
@@ -168,6 +166,7 @@ logOut log = (>>) <$> liftIO . (appendFile log) <*> traceM
 
 -- how to set args for main in GHCI
 -- :set args 2009 4 2019  1 "./module/sinaCodes"
+--threadWorkT :: MVar Char -> MVar [(String , Int,Int)] -> Maybe PortNumber -> StateT Int IO ()
 main = do
   args <- getArgs
   let sy = read @StartYear $ args!!0
@@ -181,16 +180,19 @@ main = do
   let fp = args!!4 -- "./module/sinaCodes"--read @String $ args!!4
   traceM $ fp
   cysList <- getCYSList fp sy ss ey es
+  --traceShowM cysList
   (>>=) <$> doesDirectoryExist <*>  ((flip when) . removeDirectoryRecursive)  $ "./log"
   createDirectoryIfMissing True "./log"
   syncM <- newEmptyMVar
   mlist <- newMVar cysList
   let threadList = portList
-  mapM (forkIO . threadWork syncM mlist) threadList
+  mapM (forkIO . threadWork 0 syncM mlist ) threadList
+  --mapM (forkIO . evalStateT .threadWorkT  syncM mlist ) threadList
   mapM (\_ -> takeMVar syncM) threadList
   print "main over"
   where
-    threadWork syncM mlist mayPort = do -- evalStateT 
+    -- just messy to use StateT here,it must pass lastSec in to onePage here,and output [stock] out from onePage then,this make StateT lost sense,since passing parameters is not avoidable,just use non-State way
+    threadWork lastSec syncM mlist mayPort = do -- evalStateT 
       id <- myThreadId
       let log = "./log/" ++ ((!! 1) . words . show) id ++ "log.txt"
       fileExist <- doesFileExist $ log
@@ -206,13 +208,22 @@ main = do
         let (code,year,season) = head list
         logOut log $ show id ++ " get " ++ (show . head) list ++ "\n"
         putMVar mlist (tail list)
-        startT <- getTime Monotonic
-        let startSec = (/10^9) . fromIntegral . toNanoSecs $ startT -- in sec
+        startT <- getTime Monotonic 
+        let startSec = round . (/ (10^9) ) . fromInteger . toNanoSecs $ startT -- in sec
+        logOut log $ "start time is " ++ show startSec
+        when (startSec - lastSec < 6) $ do
+          let waitSec = 6-(startSec- lastSec)
+          logOut log $ "less than 6s ,wait for " ++ show waitSec ++ " s\n"
+          threadDelay $ waitSec * (10^6)
         -- evalState
-        onePagePrice  mayPort code year season >>= saveStockPrice
+        stockL <- onePagePrice  mayPort code year season
+        endT <- getTime Monotonic
+        let endSec = round . (/ (10^9) ) . fromInteger . toNanoSecs $ endT
+        logOut log $ "end time is " ++ show endSec ++ " s\n"
+        saveStockPrice stockL
         --end <- getTime Monotonic
         --let duration = fromIntegral (toNanoSecs end - toNanoSecs start) / 10 ^9
         --when (duration < 6) $ threadDelay $ round (6-duration) * 10 ^6 -- wait for at least 6 second to avoid ban
-        threadWork syncM mlist mayPort
+        threadWork endSec syncM mlist mayPort
         
 
