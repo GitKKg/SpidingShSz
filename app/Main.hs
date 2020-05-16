@@ -136,7 +136,7 @@ getYSList y1 s1 y2 s2 = do
 currentYear :: IO Int -- :: (year,month,day)
 currentYear = getCurrentTime >>= return .fromIntegral @_ @Int . fst3 . toGregorian . utctDay
 
-portList = [Nothing, Just 5678,Just 9001,Just 9002,Just 9003,Just 9004,Just 9005,Just 9006]
+portList = [Nothing, Just 5678,Just 9000,Just 9001,Just 9002,Just 9003,Just 9004,Just 9005,Just 9006]
 --portList = [Just 5678]
 -- "./module/sinaCodes"
 getCYSList :: FilePath -> StartYear -> StartSeason -> EndYear -> EndSeason ->IO [(String,Int,Int)]
@@ -150,7 +150,7 @@ getCYSList fp sy ss ey es =  do
     
 --gps= onePagePrice mp code year season >>= saveStockPrice
 -- onePageRight mp code >>= saveBonusInfo . lefts
-gpsDemo = onePagePrice (Just 5678) "000001" 2020 1 >>= saveStockPrice
+gpsDemo = onePagePrice (Just 5678) "000001" 2020 1 >>= saveStockPrice "0"
 
 -- get rightInfo and Save to DataBase,demo
 grsDemo = do
@@ -222,7 +222,7 @@ main = do
         logOut log $ "end time is " ++ show endSec ++ "s\n"
         -- some stock just exit market or not go in public in that time range,so stockL maybe null
         -- for example, 000022,when 2019 exit market
-        when (not . null $ stockL) $ saveStockPrice stockL
+        when (not . null $ stockL) $ saveStockPrice (show id) stockL
         --end <- getTime Monotonic
         --let duration = fromIntegral (toNanoSecs end - toNanoSecs start) / 10 ^9
         --when (duration < 6) $ threadDelay $ round (6-duration) * 10 ^6 -- wait for at least 6 second to avoid ban

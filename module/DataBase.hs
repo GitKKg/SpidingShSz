@@ -19,6 +19,7 @@ module DataBase (
     saveAllotmentInfo
 ) where
 
+import Data.String
 import Database.Selda   --proxychains stack install selda-0.4.0.0
 import Database.Selda.SQLite
 import Control.Exception
@@ -156,10 +157,11 @@ insertThenInspect = do
   query (select people)
 
 -- Create databse
--- initdb.exe -D E:\Tool\PgSqlDB -E UTF-8 -U Kant -W
+-- initdb.exe -D E:\Tool\PgSqlDB\db -E UTF-8 -U Kant -W
 
 -- start running database
 -- pg_ctl -D  E:\Tool\PgSqlDB\db  -l db.log start
+-- pg_ctl -D  H:\PgSqlDB\db  -l H:\PgSqlDB\log\db.log start
 
 -- edit pg_hba.conf of server to permmit remote connection by user Kant
 -- # IPv4 local connections:
@@ -167,7 +169,8 @@ insertThenInspect = do
 -- edit postgresql.conf of server to permmit listening all IP
 --listen_addresses = '*'
 
-pgConnectInfo = "postgres" `on` "192.168.51.212" `auth` ("Kant", "123456")
+-- pgConnectInfo = "postgres" `on` "192.168.51.212" `auth` ("Kant", "123456")
+pgConnectInfo = "postgres" `on` "192.168.1.2" `auth` ("Kant", "123456")
 -- (withPostgreSQL :: PGConnectInfo -> SeldaT PG IO () -> IO ())
 testPg = withPostgreSQL @IO  pgConnectInfo $ do
   tryDropTable people
@@ -257,8 +260,8 @@ tempSPt = table "tempSPt" [#_code :+ #_date :- unique]
 -- saveStockPrice [s1]
 -- saveStockPrice [s1,s2]
 
-saveStockPrice :: [Stock] -> IO()
-saveStockPrice stockData = do
+saveStockPrice :: String -> [Stock] -> IO()
+saveStockPrice threadId stockData = do
   logOutM $ "saveStockPrice,Stock code is " ++ (unpack .(_code :: Stock -> Text) .DL.head) stockData ++ "\n"
   pgCon <- pgOpen pgConnectInfo
   -- num <- runSeldaT (do
@@ -267,6 +270,8 @@ saveStockPrice stockData = do
   --traceM $ "upsert " ++ show num ++ " rows"
 
   -- queryInto :: (MonadSelda m, Relational a) => Table a -> Query (Backend m) (Row (Backend m) a) -> m Int
+  -- different thread use different id,or else make conflict when drop or insert table with same name at the same time
+  let tempSPt  = table (fromString $ "temSpt" ++ threadId) [#_code :+ #_date :- unique]
   num <- runSeldaT (do
                        tryDropTable tempSPt
                        createTable tempSPt
@@ -412,15 +417,19 @@ saveAllotmentInfo aT = do
   seldaClose pgCon
   --traceM $ "inserted " <> show num <> " rows"
 
+-- form TDX day files, maybe should get codes from official site of stock exchange in future
 -- getStockCodes "./module/sinaCodes"
 getStockCodes :: FilePath -> IO [String]
 getStockCodes fp = do
   flist <-listDirectory fp
   -- use DS to make deduplication,just like python ever did
-  traverse return $ DS.toList . DS.fromList. DL.sort . DL.filter rmShitStock . fmap  matchCode $ flist
+  -- use not null to remove non-digital file name
+  traverse return $ DS.toList . DS.fromList. DL.sort . DL.filter (not .DL.null) .  DL.filter rmShitStock . fmap (matchNumber. matchCode) $ flist
   where
     --  just fucking weird , :: could not pass, must use @ typeApplication
-    matchCode file =  (=~) @FilePath @String @String  file  "[0-9]+"
+    -- add ^sh and ^sz to remove 0003000 such shit code,it's index of Shanghai ShenZhen, does not exist in 163 stock,trigger exception when parse
+    matchCode file =  (=~) @FilePath @String @String  file  "^sh6[0-9]+|^sz0[0-9]+"
+    matchNumber preCode = (=~) @String @String @String preCode "[0-9]+"
     rmShitStock code = not $ (=~) @String @String @Bool code "^2|^3|^9|^010^019|^1|^4|^5|^7|^8"
     -- another way, use negative match
     --rmShitStock code =  (=~) @String @String @Bool code "^[^(2|3|9)]"
