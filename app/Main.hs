@@ -155,9 +155,9 @@ gpsDemo = onePagePrice (Just 5678) "000001" 2020 1 >>= saveStockPrice "0"
 -- get rightInfo and Save to DataBase,demo
 grsDemo = do
   orInfo <- onePageRight (Just 5678) "000002" -- if don't demonad here,it will be calculated twice in below 
-  (>>) <$> (saveBonusInfo . lefts ) <*> (saveAllotmentInfo . rights ) $ orInfo
+  (>>) <$> (saveBonusInfo "0" . lefts ) <*> (saveAllotmentInfo "0" . rights ) $ orInfo
   -- (>>) <$> (saveBonusInfo . lefts =<< ) <*> (saveAllotmentInfo . rights =<< ) $ onePageRight (Just 5678) "000001" --- onePageRight is inside IO, will be calulated twice here,not you want
-  
+
 -- MVar [(code,year,season)]
 -- one thread get one mp, Maybe PortNumber, take one (code,year,season) from head of MVar List,then putMVar tail of List,so ,these multi-thread cocurrent like this way,when head List is empty,thread putMVar exit to notify main it is ok,when all threads are ok,main ok,out 
 --wmain :: StartYear -> StartSeason -> EndYear -> EndSeason -> FilePath -> IO()
@@ -183,16 +183,31 @@ main = do
   --traceShowM cysList
   (>>=) <$> doesDirectoryExist <*>  ((flip when) . removeDirectoryRecursive)  $ "./log"
   createDirectoryIfMissing True "./log"
-  syncM <- newEmptyMVar
-  mlist <- newMVar cysList
+
+  -- Price Spiding
+  syncP <- newEmptyMVar
+  mlistP <- newMVar cysList
   let threadList = portList
-  mapM (forkIO . threadWork 0 syncM mlist ) threadList
+  mapM (forkIO . threadWorkP 0 syncP mlistP ) threadList
   --mapM (forkIO . evalStateT .threadWorkT  syncM mlist ) threadList
-  mapM (\_ -> takeMVar syncM) threadList
-  print "main over"
+
+  -- Bonus and Allotment Spiding
+  codeList <- getStockCodes fp
+  syncAB <- newEmptyMVar
+  mlistAB <- newMVar codeList
+
+  mapM (forkIO . threadWorkAB 0 syncAB mlistAB) threadList
+
+  mapM_ (\_ -> takeMVar syncAB) threadList
+
+  print "Bonus and Allotment right info spiding are over! \n"
+  
+  mapM (\_ -> takeMVar syncP) threadList
+  
+  print "Price spiding over,main out\n"
   where
     -- just messy to use StateT here,it must pass lastSec in to onePage here,and output [stock] out from onePage then,this make StateT lost sense,since passing parameters is not avoidable,just use non-State way
-    threadWork lastSec syncM mlist mayPort = do -- evalStateT 
+    threadWorkP lastSec syncM mlist mayPort = do -- evalStateT 
       id <- myThreadId
       let log = "./log/" ++ ((!! 1) . words . show) id ++ "log.txt"
       fileExist <- doesFileExist $ log
@@ -226,6 +241,41 @@ main = do
         --end <- getTime Monotonic
         --let duration = fromIntegral (toNanoSecs end - toNanoSecs start) / 10 ^9
         --when (duration < 6) $ threadDelay $ round (6-duration) * 10 ^6 -- wait for at least 6 second to avoid ban
-        threadWork endSec syncM mlist mayPort
+        threadWorkP endSec syncM mlist mayPort
         
-
+    threadWorkAB lastSec syncM mlist mayPort = do -- evalStateT 
+      id <- myThreadId
+      let log = "./log/" ++ ((!! 1) . words . show) id ++ "log.txt"
+      fileExist <- doesFileExist $ log
+      when (not fileExist) $ openFile log WriteMode >>= hClose
+      list <-takeMVar mlist
+      id <- myThreadId
+      if null list
+        then do
+        logOut log $ show id ++  " out for list is empty \n"
+        putMVar mlist list -- if not put back,other thread will block
+        putMVar syncM 'x'
+        else do
+        let code = head list
+        logOut log $ show id ++ " get " ++ (show . head) list ++ "\n"
+        putMVar mlist (tail list)
+        startT <- getTime Monotonic 
+        let startSec = round . (/ (10^9) ) . fromInteger . toNanoSecs $ startT -- in sec
+        logOut log $ "start time is " ++ show startSec ++ "s\n"
+        when (startSec - lastSec < 6) $ do
+          let waitSec = 6-(startSec- lastSec)
+          logOut log $ "less than 6s ,wait for " ++ show waitSec ++ " s\n"
+          threadDelay $ waitSec * (10^6)
+        -- evalState
+        stockL <- onePageRight mayPort code
+        endT <- getTime Monotonic
+        let endSec = round . (/ (10^9) ) . fromInteger . toNanoSecs $ endT
+        logOut log $ "end time is " ++ show endSec ++ "s\n"
+        -- some stock just exit market or not go in public in that time range,so stockL maybe null
+        -- for example, 000022,when 2019 exit market
+        -- when (not . null $ stockL) $ saveStockPrice (show id) stockL
+        when (not . null $ stockL) $ (>>) <$> (saveBonusInfo (show id) . lefts ) <*> (saveAllotmentInfo (show id) . rights ) $ stockL
+        --end <- getTime Monotonic
+        --let duration = fromIntegral (toNanoSecs end - toNanoSecs start) / 10 ^9
+        --when (duration < 6) $ threadDelay $ round (6-duration) * 10 ^6 -- wait for at least 6 second to avoid ban
+        threadWorkAB endSec syncM mlist mayPort

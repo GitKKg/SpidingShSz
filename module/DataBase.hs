@@ -251,8 +251,8 @@ testPg2 = do
 -- introduce toConstrt to compare value constructor of SeldaError,so we can judge specific exception status,such DbError or SqlError
 deriving instance Data SeldaError
 
-tempSPt :: Table Stock
-tempSPt = table "tempSPt" [#_code :+ #_date :- unique]
+--tempSPt :: Table Stock
+--tempSPt = table "tempSPt" [#_code :+ #_date :- unique]
 
 -- test demo
 -- s1 = defaultStock {_date=20180906}
@@ -315,11 +315,11 @@ saveStockPrice threadId stockData = do
 -- saveBonusInfo [s1]
 -- saveBonusInfo [s1,s2]
 
-tempBt :: Table BonusInfo
-tempBt  = table "tempBonusT" [#_codeB :+ #_announceDateB  :- unique]
+--tempBt :: Table BonusInfo
+--tempBt  = table "tempBonusT" [#_codeB :+ #_announceDateB  :- unique]
 
-saveBonusInfo :: [BonusInfo] -> IO()
-saveBonusInfo bT = do
+saveBonusInfo :: String -> [BonusInfo] -> IO()
+saveBonusInfo threadId bT = do
   pgCon <- pgOpen pgConnectInfo
   -- num <- runSeldaT (do
   --                      tryCreateTable stockPriceT
@@ -327,6 +327,8 @@ saveBonusInfo bT = do
   --traceM $ "upsert " ++ show num ++ " rows"
 
   -- queryInto :: (MonadSelda m, Relational a) => Table a -> Query (Backend m) (Row (Backend m) a) -> m Int
+  -- different thread use different id,or else make conflict when drop or insert table with same name at the same time
+  let tempBt  = table (fromString $ "temBonusT" ++ threadId) [#_codeB :+ #_announceDateB  :- unique]
   num <- runSeldaT (do
                        tryDropTable tempBt
                        createTable tempBt
@@ -369,11 +371,11 @@ saveBonusInfo bT = do
 -- saveAllotmentInfo [s1]
 -- saveAllotmentInfo [s1,s2]
 
-tempAt :: Table AllotmentInfo
-tempAt  = table "tempAllotmentT" [#_codeA :+ #_announceDateA  :- unique]
+--tempAt :: Table AllotmentInfo
+--tempAt  = table "tempAllotmentT" [#_codeA :+ #_announceDateA  :- unique]
 
-saveAllotmentInfo :: [AllotmentInfo] -> IO()
-saveAllotmentInfo aT = do
+saveAllotmentInfo :: String -> [AllotmentInfo] -> IO()
+saveAllotmentInfo threadId aT = do
   pgCon <- pgOpen pgConnectInfo
   -- num <- runSeldaT (do
   --                      tryCreateTable stockPriceT
@@ -381,6 +383,8 @@ saveAllotmentInfo aT = do
   --traceM $ "upsert " ++ show num ++ " rows"
 
   -- queryInto :: (MonadSelda m, Relational a) => Table a -> Query (Backend m) (Row (Backend m) a) -> m Int
+  -- different thread use different id,or else make conflict when drop or insert table with same name at the same time
+  let tempAt  = table (fromString $ "tempAllotmentT" ++ threadId) [#_codeA :+ #_announceDateA  :- unique]
   num <- runSeldaT (do
                        tryDropTable tempAt
                        createTable tempAt
