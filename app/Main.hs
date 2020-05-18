@@ -150,11 +150,11 @@ getCYSList fp sy ss ey es =  do
     
 --gps= onePagePrice mp code year season >>= saveStockPrice
 -- onePageRight mp code >>= saveBonusInfo . lefts
-gpsDemo = onePagePrice (Just 5678) "000001" 2020 1 >>= saveStockPrice "0"
+gpsDemo = snd <$> (onePagePrice (Just 5678) "000001" 2020 1) >>= saveStockPrice "0"
 
 -- get rightInfo and Save to DataBase,demo
 grsDemo = do
-  orInfo <- onePageRight (Just 5678) "000002" -- if don't demonad here,it will be calculated twice in below 
+  (endSec, orInfo) <- onePageRight (Just 5678) "000002" -- if don't demonad here,it will be calculated twice in below 
   (>>) <$> (saveBonusInfo "0" . lefts ) <*> (saveAllotmentInfo "0" . rights ) $ orInfo
   -- (>>) <$> (saveBonusInfo . lefts =<< ) <*> (saveAllotmentInfo . rights =<< ) $ onePageRight (Just 5678) "000001" --- onePageRight is inside IO, will be calulated twice here,not you want
 
@@ -231,9 +231,9 @@ main = do
           logOut log $ "less than 6s ,wait for " ++ show waitSec ++ " s\n"
           threadDelay $ waitSec * (10^6)
         -- evalState
-        stockL <- onePagePrice mayPort code year season
-        endT <- getTime Monotonic
-        let endSec = round . (/ (10^9) ) . fromInteger . toNanoSecs $ endT
+        (endSec ,stockL) <- onePagePrice mayPort code year season
+        --endT <- getTime Monotonic
+        -- let endSec = round . (/ (10^9) ) . fromInteger . toNanoSecs $ endT
         logOut log $ "end time is " ++ show endSec ++ "s\n"
         -- some stock just exit market or not go in public in that time range,so stockL maybe null
         -- for example, 000022,when 2019 exit market
@@ -267,9 +267,9 @@ main = do
           logOut log $ "less than 6s ,wait for " ++ show waitSec ++ " s\n"
           threadDelay $ waitSec * (10^6)
         -- evalState
-        stockL <- onePageRight mayPort code
-        endT <- getTime Monotonic
-        let endSec = round . (/ (10^9) ) . fromInteger . toNanoSecs $ endT
+        (endSec, stockL) <- onePageRight mayPort code
+        --endT <- getTime Monotonic
+        --let endSec = round . (/ (10^9) ) . fromInteger . toNanoSecs $ endT
         logOut log $ "end time is " ++ show endSec ++ "s\n"
         -- some stock just exit market or not go in public in that time range,so stockL maybe null
         -- for example, 000022,when 2019 exit market

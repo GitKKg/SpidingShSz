@@ -109,7 +109,7 @@ stockTab =  "div" @: [hasClass "inner_box"] // "table" @:[AttributeString "class
 data1OrData2 = makeRegex ("^$|dbrow" :: String) :: Regex -- must specify type notation "String" or else complier will complain
 
 -- proxy port, stock code, year, season
-onePagePrice :: Maybe PortNumber -> String -> Int -> Int -> IO [Stock] --"000001" 2020 01
+onePagePrice :: Maybe PortNumber -> String -> Int -> Int -> IO (Int,[Stock]) --"000001" 2020 01
 onePagePrice mp stockCode year season = do
   --let v2managerSetting = mkManagerSettings tlsSetting (Just proxySetting)
   logOutM $ "onePagePrice,Stock code is " ++ stockCode ++ ",port is " ++ show mp ++ "\n"
@@ -131,7 +131,8 @@ onePagePrice mp stockCode year season = do
           Right response ->  return response
           
   response163NoHead <- getpage 
-  
+  endT <- getTime Monotonic
+  let endSec = round . (/ (10^9) ) . fromInteger . toNanoSecs $ endT
   logOutM $ "get Pages!\n"
   -- be hold! sometime will get invalid data ,need handling  
   -- Exception: Maybe.fromJust: Nothing
@@ -142,7 +143,7 @@ onePagePrice mp stockCode year season = do
             logOutM $ "wait for 5 mins,repeat again \n"
             threadDelay $ 1000000*60*5
             onePagePrice mp stockCode year season 
-          Right stock ->  return stock
+          Right stock ->  return (endSec, stock)
   --print stockA
   --return stockA
   where

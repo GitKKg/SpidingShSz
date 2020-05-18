@@ -60,6 +60,8 @@ import Control.Concurrent
 
 import DebugLogM
 
+import System.Clock
+
 -- http://money.finance.sina.com.cn/corp/go.php/vISSUE_ShareBonus/stockid/002166.phtml
 sinaURL :: String ->String
 sinaURL code = "http://money.finance.sina.com.cn/corp/go.php/vISSUE_ShareBonus/stockid/"
@@ -123,7 +125,7 @@ allotmentRow = allotmentTab // "tbody" `atDepth` 1 // "tr" `atDepth` 1
 instance Semigroup a => Semigroup (Scraper r a) where
   sa <> sb = fmap (<>) sa  <*> sb
 
-onePageRight :: Maybe PortNumber -> String -> IO [RightInfo]
+onePageRight :: Maybe PortNumber -> String -> IO (Int,[RightInfo])
 onePageRight mp code = do
   --let v2managerSetting = mkManagerSettings tlsSetting (Just proxySetting)
   systemManager <- newManager $
@@ -144,7 +146,8 @@ onePageRight mp code = do
           Right response ->  return response
           
   responseSinaNoHead <- getpage
-
+  endT <- getTime Monotonic
+  let endSec = round . (/ (10^9) ) . fromInteger . toNanoSecs $ endT
   logOutM $ "get Page!\n"
   --putStrLn $ "The Sina status code was: " ++ (show $ statusCode $ responseStatus responseSinaNoHead)
   gbk <- ICU.open "gbk" Nothing
@@ -161,7 +164,7 @@ onePageRight mp code = do
             logOutM $ "wait for 5 mins,repeat again \n"
             threadDelay $ 1000000*60*5
             onePageRight mp code
-          Right right -> traverse print right >> return right
+          Right right -> traverse print right >> return (endSec,right)
   -- traverse return . fromJust $ scrapeStringLike gbkPage stockScraper
   
   -- new topic, how to parallelly pass 2 parameters inside monad into 2 monad
