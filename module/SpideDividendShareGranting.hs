@@ -125,8 +125,8 @@ allotmentRow = allotmentTab // "tbody" `atDepth` 1 // "tr" `atDepth` 1
 instance Semigroup a => Semigroup (Scraper r a) where
   sa <> sb = fmap (<>) sa  <*> sb
 
-onePageRight :: Maybe PortNumber -> String -> IO (Int,[RightInfo])
-onePageRight mp code = do
+onePageRight :: MVar [String] -> Maybe PortNumber -> Int -> String -> IO (Int,[RightInfo])
+onePageRight mlist mp howManyPort code = do
   --let v2managerSetting = mkManagerSettings tlsSetting (Just proxySetting)
   systemManager <- newManager $
     if isJust mp
@@ -134,7 +134,7 @@ onePageRight mp code = do
     else tlsManagerSettings
   logOutM $ "spiding " ++ code ++ "right info with " ++ show mp ++ "\n"
   requestSinaNoHead <- parseRequest $ sinaURL code
-  let getpage = do
+  let getpage mlist mp howManyPort stockCode  = do
         -- TypeApplications make you type less words, use @ !
         eResponse <- try @SomeException  $ httpLbs requestSinaNoHead systemManager
         case eResponse of
@@ -142,10 +142,19 @@ onePageRight mp code = do
             logOutM $ "Sina exception! is \n" ++ show e ++ "\nstop onePageData!"
             logOutM $ "wait for 1s,repeat again \n"
             threadDelay 1000000
-            getpage -- mzero make you exit onePageData in advance
+            case (isJust mp) of
+              True -> do
+                list <-takeMVar mlist
+                case (Prelude.length list < howManyPort) of
+                  True -> do
+                    putMVar mlist $ [stockCode] ++ list -- let direct link to finish the rest
+                    --putMVar syncM 'x'
+                    mzero
+                  otherwise -> putMVar mlist list
+            getpage mlist mp howManyPort stockCode
           Right response ->  return response
           
-  responseSinaNoHead <- getpage
+  responseSinaNoHead <- getpage mlist mp howManyPort code
   endT <- getTime Monotonic
   let endSec = round . (/ (10^9) ) . fromInteger . toNanoSecs $ endT
   logOutM $ "get Page!\n"
@@ -163,7 +172,7 @@ onePageRight mp code = do
             logOutM $ "exception when parsing! is \n" ++ show e ++ "\n it seems baned by sina!\n"
             logOutM $ "wait for 5 mins,repeat again \n"
             threadDelay $ 1000000*60*5
-            onePageRight mp code
+            onePageRight mlist mp howManyPort code
           Right right -> traverse print right >> return (endSec,right)
   -- traverse return . fromJust $ scrapeStringLike gbkPage stockScraper
   

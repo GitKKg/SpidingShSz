@@ -159,13 +159,18 @@ getCYSList fp sy ss ey es =  do
 -- onePageRight mp code >>= saveBonusInfo . lefts
 -- gpsDemo = snd <$> (onePagePrice (Just 5678) "000001" 2020 1) >>= saveStockPrice "0"
 -- new demo to be compatible with early exit feature for proxy threads
+-- set error port could test mzero exception
 gpsDemo = do
   mlist <- newMVar [("000001" , 2020, 1)]
-  snd <$> (onePagePrice mlist (Just 10808) 10 "000001" 2020 1) >>= saveStockPrice "0"
+  ee <- try @SomeException $ snd <$> (onePagePrice mlist (Just 10808) 10 "000001" 2020 1) >>= saveStockPrice "0"
+  case ee of
+    Left e -> do
+      logOutM $ "exception when onePagePrice! is \n" ++ show e ++ "\n it seems proxy thread demand out!\n"
 
 -- get rightInfo and Save to DataBase,demo
 grsDemo = do
-  (endSec, orInfo) <- onePageRight (Just 5678) "000002" -- if don't demonad here,it will be calculated twice in below 
+  mlist <- newMVar ["000001"]
+  (endSec, orInfo) <- onePageRight mlist (Just 5678) 10  "000002" -- if don't demonad here,it will be calculated twice in below 
   (>>) <$> (saveBonusInfo "0" . lefts ) <*> (saveAllotmentInfo "0" . rights ) $ orInfo
   -- (>>) <$> (saveBonusInfo . lefts =<< ) <*> (saveAllotmentInfo . rights =<< ) $ onePageRight (Just 5678) "000001" --- onePageRight is inside IO, will be calulated twice here,not you want
 
@@ -207,9 +212,10 @@ main = do
   syncAB <- newEmptyMVar
   mlistAB <- newMVar codeList
 
-  mapM (forkIO . threadWorkAB 0 syncAB mlistAB) threadList
+  mapM (forkIO . threadWorkAB 0 syncAB mlistAB threadList False) threadList
 
-  mapM_ (\_ -> takeMVar syncAB) threadList
+  -- mapM_ (\_ -> takeMVar syncAB) threadList
+  takeMVar syncAB
 
   print "Bonus and Allotment right info spiding are over! \n"
   
@@ -271,7 +277,7 @@ main = do
             --when (duration < 6) $ threadDelay $ round (6-duration) * 10 ^6 -- wait for at least 6 second to avoid ban
             threadWorkP endSec syncM mlist threadList allOut mayPort
         
-    threadWorkAB lastSec syncM mlist mayPort = do -- evalStateT 
+    threadWorkAB lastSec syncM mlist threadList allOut mayPort = do -- evalStateT
       id <- myThreadId
       let log = "./log/" ++ ((!! 1) . words . show) id ++ "log.txt"
       fileExist <- doesFileExist $ log
@@ -282,7 +288,16 @@ main = do
         then do
         logOut log $ show id ++  " out for list is empty \n"
         putMVar mlist list -- if not put back,other thread will block
-        putMVar syncM 'x'
+        case (isNothing mayPort) of
+          True -> do -- Direct link thread
+            case (not allOut) of
+              True -> do -- proxy threads are not out
+                putMVar syncM 'x' -- include count of yourself
+                mapM_ (\_ -> takeMVar syncM) threadList -- wait for all proxy threads out
+                threadWorkAB lastSec syncM mlist threadList True mayPort
+              otherwise -> putMVar syncM 'x' -- put again for main
+          otherwise -> putMVar syncM 'x' -- proxy thread out
+  
         else do
         let code = head list
         logOut log $ show id ++ " get " ++ (show . head) list ++ "\n"
@@ -294,16 +309,20 @@ main = do
           let waitSec = 6-(startSec- lastSec)
           logOut log $ "less than 6s ,wait for " ++ show waitSec ++ " s\n"
           threadDelay $ waitSec * (10^6)
-        -- evalState
-        (endSec, stockL) <- onePageRight mayPort code
-        --endT <- getTime Monotonic
-        --let endSec = round . (/ (10^9) ) . fromInteger . toNanoSecs $ endT
-        logOut log $ "end time is " ++ show endSec ++ "s\n"
-        -- some stock just exit market or not go in public in that time range,so stockL maybe null
-        -- for example, 000022,when 2019 exit market
-        -- when (not . null $ stockL) $ saveStockPrice (show id) stockL
-        when (not . null $ stockL) $ (>>) <$> (saveBonusInfo (show id) . lefts ) <*> (saveAllotmentInfo (show id) . rights ) $ stockL
-        --end <- getTime Monotonic
-        --let duration = fromIntegral (toNanoSecs end - toNanoSecs start) / 10 ^9
-        --when (duration < 6) $ threadDelay $ round (6-duration) * 10 ^6 -- wait for at least 6 second to avoid ban
-        threadWorkAB endSec syncM mlist  mayPort
+
+        eRinfo <- try @SomeException $ onePageRight mlist mayPort (Prelude.length threadList) code
+        case eRinfo of
+          Left e -> do
+            logOutM $ "exception when onePagePrice! is \n" ++ show e ++ "\n it seems proxy thread demand out!\n"
+            putMVar syncM 'x'
+          Right info -> do
+            let (endSec,stockL) = info
+            logOut log $ "end time is " ++ show endSec ++ "s\n"
+            -- some stock just exit market or not go in public in that time range,so stockL maybe null
+            -- for example, 000022,when 2019 exit market
+            -- when (not . null $ stockL) $ saveStockPrice (show id) stockL
+            when (not . null $ stockL) $ (>>) <$> (saveBonusInfo (show id) . lefts ) <*> (saveAllotmentInfo (show id) . rights ) $ stockL
+            --end <- getTime Monotonic
+            --let duration = fromIntegral (toNanoSecs end - toNanoSecs start) / 10 ^9
+            --when (duration < 6) $ threadDelay $ round (6-duration) * 10 ^6 -- wait for at least 6 second to avoid ban
+            threadWorkAB lastSec syncM mlist threadList allOut mayPort
