@@ -35,6 +35,13 @@ import Control.Monad.State
 import Control.Monad.State.Lazy
 
 import System.IO.Unsafe
+
+import Data.Maybe
+
+import Control.Exception
+
+import DebugLogM
+
 -- demo for State
 type NameGen = State Int
 
@@ -150,7 +157,11 @@ getCYSList fp sy ss ey es =  do
     
 --gps= onePagePrice mp code year season >>= saveStockPrice
 -- onePageRight mp code >>= saveBonusInfo . lefts
-gpsDemo = snd <$> (onePagePrice (Just 5678) "000001" 2020 1) >>= saveStockPrice "0"
+-- gpsDemo = snd <$> (onePagePrice (Just 5678) "000001" 2020 1) >>= saveStockPrice "0"
+-- new demo to be compatible with early exit feature for proxy threads
+gpsDemo = do
+  mlist <- newMVar [("000001" , 2020, 1)]
+  snd <$> (onePagePrice mlist (Just 10808) 10 "000001" 2020 1) >>= saveStockPrice "0"
 
 -- get rightInfo and Save to DataBase,demo
 grsDemo = do
@@ -188,7 +199,7 @@ main = do
   syncP <- newEmptyMVar
   mlistP <- newMVar cysList
   let threadList = portList
-  mapM (forkIO . threadWorkP 0 syncP mlistP ) threadList
+  mapM (forkIO . threadWorkP 0 syncP mlistP  threadList False) threadList
   --mapM (forkIO . evalStateT .threadWorkT  syncM mlist ) threadList
 
   -- Bonus and Allotment Spiding
@@ -202,12 +213,14 @@ main = do
 
   print "Bonus and Allotment right info spiding are over! \n"
   
-  mapM (\_ -> takeMVar syncP) threadList
+  -- mapM (\_ -> takeMVar syncP) threadList
+  -- already wait proxy thread in direct link thread
+  takeMVar syncP
   
   print "Price spiding over,main out\n"
   where
     -- just messy to use StateT here,it must pass lastSec in to onePage here,and output [stock] out from onePage then,this make StateT lost sense,since passing parameters is not avoidable,just use non-State way
-    threadWorkP lastSec syncM mlist mayPort = do -- evalStateT 
+    threadWorkP lastSec syncM mlist threadList allOut mayPort  = do -- evalStateT 
       id <- myThreadId
       let log = "./log/" ++ ((!! 1) . words . show) id ++ "log.txt"
       fileExist <- doesFileExist $ log
@@ -218,7 +231,16 @@ main = do
         then do
         logOut log $ show id ++  " out for list is empty \n"
         putMVar mlist list -- if not put back,other thread will block
-        putMVar syncM 'x'
+        case (isNothing mayPort) of
+          True -> do -- Direct link thread
+            case (not allOut) of
+              True -> do -- proxy threads are not out
+                putMVar syncM 'x' -- include count of yourself
+                mapM_ (\_ -> takeMVar syncM) threadList -- wait for all proxy threads out
+                threadWorkP lastSec syncM mlist threadList True mayPort
+              otherwise -> putMVar syncM 'x' -- put again for main
+          otherwise -> putMVar syncM 'x' -- proxy thread out
+        
         else do
         let (code,year,season) = head list
         logOut log $ show id ++ " get " ++ (show . head) list ++ "\n"
@@ -231,17 +253,23 @@ main = do
           logOut log $ "less than 6s ,wait for " ++ show waitSec ++ " s\n"
           threadDelay $ waitSec * (10^6)
         -- evalState
-        (endSec ,stockL) <- onePagePrice mayPort code year season
-        --endT <- getTime Monotonic
-        -- let endSec = round . (/ (10^9) ) . fromInteger . toNanoSecs $ endT
-        logOut log $ "end time is " ++ show endSec ++ "s\n"
-        -- some stock just exit market or not go in public in that time range,so stockL maybe null
-        -- for example, 000022,when 2019 exit market
-        when (not . null $ stockL) $ saveStockPrice (show id) stockL
-        --end <- getTime Monotonic
-        --let duration = fromIntegral (toNanoSecs end - toNanoSecs start) / 10 ^9
-        --when (duration < 6) $ threadDelay $ round (6-duration) * 10 ^6 -- wait for at least 6 second to avoid ban
-        threadWorkP endSec syncM mlist mayPort
+        ePInfo <- try @SomeException $ onePagePrice mlist mayPort (Prelude.length threadList) code year season
+        case ePInfo of
+          Left e -> do
+            logOutM $ "exception when onePagePrice! is \n" ++ show e ++ "\n it seems proxy thread demand out!\n"
+            putMVar syncM 'x'
+          Right info -> do
+            let (endSec ,stockL) = info
+            --endT <- getTime Monotonic
+            -- let endSec = round . (/ (10^9) ) . fromInteger . toNanoSecs $ endT
+            logOut log $ "end time ``is " ++ show endSec ++ "s\n"
+            -- some stock just exit market or not go in public in that time range,so stockL maybe null
+            -- for example, 000022,when 2019 exit market
+            when (not . null $ stockL) $ saveStockPrice (show id) stockL
+            --end <- getTime Monotonic
+            --let duration = fromIntegral (toNanoSecs end - toNanoSecs start) / 10 ^9
+            --when (duration < 6) $ threadDelay $ round (6-duration) * 10 ^6 -- wait for at least 6 second to avoid ban
+            threadWorkP endSec syncM mlist threadList allOut mayPort
         
     threadWorkAB lastSec syncM mlist mayPort = do -- evalStateT 
       id <- myThreadId
@@ -278,4 +306,4 @@ main = do
         --end <- getTime Monotonic
         --let duration = fromIntegral (toNanoSecs end - toNanoSecs start) / 10 ^9
         --when (duration < 6) $ threadDelay $ round (6-duration) * 10 ^6 -- wait for at least 6 second to avoid ban
-        threadWorkAB endSec syncM mlist mayPort
+        threadWorkAB endSec syncM mlist  mayPort

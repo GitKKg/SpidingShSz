@@ -109,8 +109,8 @@ stockTab =  "div" @: [hasClass "inner_box"] // "table" @:[AttributeString "class
 data1OrData2 = makeRegex ("^$|dbrow" :: String) :: Regex -- must specify type notation "String" or else complier will complain
 
 -- proxy port, stock code, year, season
-onePagePrice :: Maybe PortNumber -> String -> Int -> Int -> IO (Int,[Stock]) --"000001" 2020 01
-onePagePrice mp stockCode year season = do
+onePagePrice :: MVar [(String,Int,Int)] -> Maybe PortNumber -> Int -> String -> Int -> Int -> IO (Int,[Stock]) --"000001" 2020 01
+onePagePrice mlist mp howManyPort stockCode year season = do
   --let v2managerSetting = mkManagerSettings tlsSetting (Just proxySetting)
   logOutM $ "onePagePrice,Stock code is " ++ stockCode ++ ",port is " ++ show mp ++ "\n"
   systemManager <- newManager $
@@ -119,7 +119,7 @@ onePagePrice mp stockCode year season = do
     else tlsManagerSettings
   
   request163NoHead <- parseRequest $ stock163URL stockCode year season
-  let getpage = do
+  let getpage mlist mp howManyPort stockCode year season= do
         -- TypeApplications make you type less words, use @ !
         eResponse <- try @SomeException  $ httpLbs request163NoHead systemManager
         case eResponse of
@@ -127,10 +127,20 @@ onePagePrice mp stockCode year season = do
             logOutM $ "exception! is \n" ++ show e ++ "\nstop onePageData!\n"
             logOutM $ "wait for 1s,repeat again \n"
             threadDelay 1000000
-            getpage -- mzero make you exit onePageData in advance
+            -- use case not if for if and do embed logic,if will cause many indent issues can't be resloved
+            case (isJust mp) of
+              True -> do
+                list <-takeMVar mlist
+                case (Prelude.length list < howManyPort) of
+                  True -> do
+                    putMVar mlist $ [(stockCode,year,season)] ++ list -- let direct link to finish the rest
+                    --putMVar syncM 'x'
+                    mzero
+                  otherwise -> putMVar mlist list
+            getpage mlist mp howManyPort stockCode year season -- mzero make you exit onePageData in advance
           Right response ->  return response
           
-  response163NoHead <- getpage 
+  response163NoHead <- getpage mlist mp howManyPort stockCode year season
   endT <- getTime Monotonic
   let endSec = round . (/ (10^9) ) . fromInteger . toNanoSecs $ endT
   logOutM $ "get Pages!\n"
@@ -142,7 +152,7 @@ onePagePrice mp stockCode year season = do
             logOutM $ "exception when parsing! is \n" ++ show e ++ "\n it seems baned by 163!\n"
             logOutM $ "wait for 5 mins,repeat again \n"
             threadDelay $ 1000000*60*5
-            onePagePrice mp stockCode year season 
+            onePagePrice mlist mp howManyPort stockCode year season 
           Right stock ->  return (endSec, stock)
   --print stockA
   --return stockA
