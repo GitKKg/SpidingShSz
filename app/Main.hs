@@ -166,6 +166,7 @@ gpsDemo = do
   case ee of
     Left e -> do
       logOutM $ "exception when onePagePrice! is \n" ++ show e ++ "\n it seems proxy thread demand out!\n"
+    Right ok -> return ()
 
 -- get rightInfo and Save to DataBase,demo
 grsDemo = do
@@ -203,8 +204,13 @@ main = do
   -- Price Spiding
   syncP <- newEmptyMVar
   mlistP <- newMVar cysList
+
+  -- just one syncD for sync with main is not suitble,MVar is not count,is get one to take one
+  --syncD <- newEmptyMVar -- for main wait for Direct link thread
+  syncDP <- newEmptyMVar -- for main wait for Direct link thread of Pricing
+  syncDab <- newEmptyMVar -- for main wait for Direct link thread of AB
   let threadList = portList
-  mapM (forkIO . threadWorkP 0 syncP mlistP  threadList False) threadList
+  mapM (forkIO . threadWorkP 0 syncP syncDP mlistP  threadList False) threadList
   --mapM (forkIO . evalStateT .threadWorkT  syncM mlist ) threadList
 
   -- Bonus and Allotment Spiding
@@ -212,21 +218,20 @@ main = do
   syncAB <- newEmptyMVar
   mlistAB <- newMVar codeList
 
-  mapM (forkIO . threadWorkAB 0 syncAB mlistAB threadList False) threadList
+  mapM (forkIO . threadWorkAB 0 syncAB syncDab mlistAB threadList False) threadList
 
   -- mapM_ (\_ -> takeMVar syncAB) threadList
-  takeMVar syncAB
+  takeMVar syncDab
 
   print "Bonus and Allotment right info spiding are over! \n"
   
   -- mapM (\_ -> takeMVar syncP) threadList
-  -- already wait proxy thread in direct link thread
-  takeMVar syncP
+  takeMVar syncDP
   
   print "Price spiding over,main out\n"
   where
     -- just messy to use StateT here,it must pass lastSec in to onePage here,and output [stock] out from onePage then,this make StateT lost sense,since passing parameters is not avoidable,just use non-State way
-    threadWorkP lastSec syncM mlist threadList allOut mayPort  = do -- evalStateT 
+    threadWorkP lastSec syncM syncD mlist threadList allOut mayPort  = do
       id <- myThreadId
       let log = "./log/" ++ ((!! 1) . words . show) id ++ "log.txt"
       fileExist <- doesFileExist $ log
@@ -241,11 +246,19 @@ main = do
           True -> do -- Direct link thread
             case (not allOut) of
               True -> do -- proxy threads are not out
-                putMVar syncM 'x' -- include count of yourself
-                mapM_ (\_ -> takeMVar syncM) threadList -- wait for all proxy threads out
-                threadWorkP lastSec syncM mlist threadList True mayPort
-              otherwise -> putMVar syncM 'x' -- put again for main
-          otherwise -> putMVar syncM 'x' -- proxy thread out
+                -- should not count yourself,for proxy may out before you,and putMVar before you,so block your putMVar
+                --putMVar syncM 'x' -- include count of yourself
+                logOut log $ show id ++ " as Direclink, wait for all proxy threads out !\n"
+                -- wait for all proxy threads out,except direct link
+                mapM_ (\_ -> takeMVar syncM) (tail threadList)
+                logOut log $ show id ++ " as Direclink, known all proxy threads out !\n"
+                threadWorkP lastSec syncM syncD mlist threadList True mayPort
+              otherwise -> do
+                logOut log $ show id ++ " as Directlink, notify main to out\n"
+                putMVar syncD 'x' -- Direclink thread out
+          otherwise -> do
+            logOut log $ show id ++ " as proxy thread , is normally out ,list empty\n"
+            putMVar syncM 'x' -- proxy thread out
         
         else do
         let (code,year,season) = head list
@@ -256,7 +269,7 @@ main = do
         logOut log $ "start time is " ++ show startSec ++ "s\n"
         when (startSec - lastSec < 6) $ do
           let waitSec = 6-(startSec- lastSec)
-          logOut log $ "less than 6s ,wait for " ++ show waitSec ++ " s\n"
+          logOut log $ "less than 6s ,wait for " ++ show waitSec ++ "s\n"
           threadDelay $ waitSec * (10^6)
         -- evalState
         ePInfo <- try @SomeException $ onePagePrice mlist mayPort (Prelude.length threadList) code year season
@@ -268,16 +281,16 @@ main = do
             let (endSec ,stockL) = info
             --endT <- getTime Monotonic
             -- let endSec = round . (/ (10^9) ) . fromInteger . toNanoSecs $ endT
-            logOut log $ "end time ``is " ++ show endSec ++ "s\n"
+            logOut log $ "end time is " ++ show endSec ++ "s\n"
             -- some stock just exit market or not go in public in that time range,so stockL maybe null
             -- for example, 000022,when 2019 exit market
             when (not . null $ stockL) $ saveStockPrice (show id) stockL
             --end <- getTime Monotonic
             --let duration = fromIntegral (toNanoSecs end - toNanoSecs start) / 10 ^9
             --when (duration < 6) $ threadDelay $ round (6-duration) * 10 ^6 -- wait for at least 6 second to avoid ban
-            threadWorkP endSec syncM mlist threadList allOut mayPort
+            threadWorkP endSec syncM syncD mlist threadList allOut mayPort
         
-    threadWorkAB lastSec syncM mlist threadList allOut mayPort = do -- evalStateT
+    threadWorkAB lastSec syncM syncD mlist threadList allOut mayPort = do -- evalStateT
       id <- myThreadId
       let log = "./log/" ++ ((!! 1) . words . show) id ++ "log.txt"
       fileExist <- doesFileExist $ log
@@ -292,11 +305,19 @@ main = do
           True -> do -- Direct link thread
             case (not allOut) of
               True -> do -- proxy threads are not out
-                putMVar syncM 'x' -- include count of yourself
-                mapM_ (\_ -> takeMVar syncM) threadList -- wait for all proxy threads out
-                threadWorkAB lastSec syncM mlist threadList True mayPort
-              otherwise -> putMVar syncM 'x' -- put again for main
-          otherwise -> putMVar syncM 'x' -- proxy thread out
+                -- should not count yourself,for proxy may out before you,and putMVar before you,so block your putMVar
+                --putMVar syncM 'x' -- include count of yourself
+                logOut log $ show id ++ " as Direclink, wait for all proxy threads out!\n"
+                -- wait for all proxy threads out,except direct link
+                mapM_ (\_ -> takeMVar syncM) (tail threadList)
+                logOut log $ show id ++ " as Direclink, known all proxy threads out!\n"
+                threadWorkAB lastSec syncM syncD mlist threadList True mayPort
+              otherwise -> do
+                logOut log $ show id ++ " as Directlink, notify main to out"
+                putMVar syncD 'x'
+          otherwise -> do
+            logOut log $ show id ++ " as proxy thread , is normally out ,list empty\n"
+            putMVar syncM 'x' -- proxy thread out
   
         else do
         let code = head list
@@ -307,7 +328,7 @@ main = do
         logOut log $ "start time is " ++ show startSec ++ "s\n"
         when (startSec - lastSec < 6) $ do
           let waitSec = 6-(startSec- lastSec)
-          logOut log $ "less than 6s ,wait for " ++ show waitSec ++ " s\n"
+          logOut log $ "less than 6s ,wait for " ++ show waitSec ++ "s\n"
           threadDelay $ waitSec * (10^6)
 
         eRinfo <- try @SomeException $ onePageRight mlist mayPort (Prelude.length threadList) code
@@ -325,4 +346,4 @@ main = do
             --end <- getTime Monotonic
             --let duration = fromIntegral (toNanoSecs end - toNanoSecs start) / 10 ^9
             --when (duration < 6) $ threadDelay $ round (6-duration) * 10 ^6 -- wait for at least 6 second to avoid ban
-            threadWorkAB lastSec syncM mlist threadList allOut mayPort
+            threadWorkAB lastSec syncM syncD mlist threadList allOut mayPort

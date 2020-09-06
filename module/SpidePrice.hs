@@ -137,6 +137,7 @@ onePagePrice mlist mp howManyPort stockCode year season = do
                     --putMVar syncM 'x'
                     mzero
                   otherwise -> putMVar mlist list
+              otherwise -> return ()
             getpage mlist mp howManyPort stockCode year season -- mzero make you exit onePageData in advance
           Right response ->  return response
           

@@ -18,7 +18,7 @@ module DataBase (
     saveBonusInfo,
     saveAllotmentInfo
 ) where
-
+import Data.Maybe
 import Data.String
 import Database.Selda   --proxychains stack install selda-0.4.0.0
 import Database.Selda.SQLite
@@ -169,8 +169,22 @@ insertThenInspect = do
 -- edit postgresql.conf of server to permmit listening all IP
 --listen_addresses = '*'
 
+-- sudo chmod 777 /var/run/postgresql
+-- initdb is here :  /usr/lib/postgresql/12/bin/
+-- emacs pg_hba.conf
+-- # IPv4 local connections:
+-- host    all             Kant             127.0.0.1/32            password
+-- /usr/lib/postgresql/12/bin$ ./pg_ctl -D /media/sdb1/PgSqlDB/stockDB -l /media/sdb1/PgSqlDB/log/stockDb.log start  , stop
+-- if start failied with permmsion denied:
+-- sudo chown -R kyle /var/run/postgresql , kyle here is your login user name
+
+-- sudo su - postgres -c "createuser Kant --createdb"
+-- sudo emacs /etc/postgresql/12/main/pg_hba.conf
+-- Local all postgres peer to Local all postgres trust
+
 -- pgConnectInfo = "postgres" `on` "192.168.51.212" `auth` ("Kant", "123456")
-pgConnectInfo = "postgres" `on` "192.168.1.2" `auth` ("Kant", "123456")
+-- pgConnectInfo = "postgres" `on` "192.168.1.2" `auth` ("Kant", "123456")
+pgConnectInfo = "postgres" `on` "127.0.0.1" `auth` ("Kant", "Kant")
 -- (withPostgreSQL :: PGConnectInfo -> SeldaT PG IO () -> IO ())
 testPg = withPostgreSQL @IO  pgConnectInfo $ do
   tryDropTable people
@@ -286,14 +300,31 @@ saveStockPrice threadId stockData = do
                   --insert stockPriceT stockData -- all inserted or none
                   -- liftIO $ getLine -- test exception
                   queryInto stockPriceT $ do
-                    sdata <- select tempSPt
-                    restrict (not_ $ (sdata ! #_code ) `isIn` (#_code  `from` select stockPriceT) .&& (sdata ! #_date ) `isIn` (#_date  `from` select stockPriceT) )
-                    return sdata
+                    --or <- select stockPriceT
+                    --tr <- select tempSPt
+                    --restrict $ (or ! #_code ./= tr ! #_code) .|| (or ! #_date ./= tr ! #_date)
+                    sR <-select tempSPt
+                    ssR <- leftJoin (\rC ->  ( (rC ! #_code .== sR ! #_code) .&& (rC ! #_date .== sR ! #_date) ) ) (do
+                                                                                                                             ssdata <-select stockPriceT
+                                                                                                                             restrict $ literal False
+                                                                                                                             return ssdata
+                                                                                                                         )
+                             
+                    
+                    --sdata <- innerJoin (\rC -> not_ ( (rC ! #_code .== tr ! #_code) .&& (rC ! #_date .== tr ! #_date) ) ) (select stockPriceT)
+                    -- let inQ=  select tempSPt
+                    -- inq <- inQ
+                    -- --outQ <- inner $ select stockPriceT
+                    -- innerJoin (\oca -> (oca ! #_code) .== (inq ! #_code) ) (select stockPriceT)
+                    -- sdata <- inQ -- select tempSPt
+                    -- -- just insert new code or new date
+                    -- restrict (not_ ( (sdata ! #_code ) `isIn` (#_code  `from` select stockPriceT)) .|| not_ ( (sdata ! #_date ) `isIn` (#_date  `from` select stockPriceT)) )
+                    return  sR
               )
     pgCon
   num <- case enum of
     Left e ->  do
-      logOutM $ "exception : \n" ++ show e ++ ",\njust return 0"
+      logOutM $ "exception : \n" ++ show e ++ ",\njust return 0 \n"
       -- strictly speaking, for safety if we don't use withPostgreSQL, we need handle every serious exception exit such as DbError 
       if toConstr e == toConstr ( DbError "anything")
         then (logOutM $ "Database issue!Stop program!\n") >> seldaClose pgCon >> mzero
@@ -344,7 +375,8 @@ saveBonusInfo threadId bT = do
                   -- liftIO $ getLine -- test exception
                   queryInto bonusInfoT $ do
                     sdata <- select tempBt
-                    restrict (not_ $ (sdata ! #_codeB) `isIn` (#_codeB  `from` select bonusInfoT) .&& (sdata ! #_announceDateB ) `isIn` (#_announceDateB `from` select bonusInfoT) )
+                    -- just inser new code or new announceDate
+                    restrict (not_ ( (sdata ! #_codeB) `isIn` (#_codeB  `from` select bonusInfoT)) .|| not_ ((sdata ! #_announceDateB ) `isIn` (#_announceDateB `from` select bonusInfoT)) )
                     return sdata
               )
     pgCon
@@ -400,7 +432,8 @@ saveAllotmentInfo threadId aT = do
                   -- liftIO $ getLine -- test exception
                   queryInto allotmentT $ do
                     sdata <- select tempAt
-                    restrict (not_ $ (sdata ! #_codeA) `isIn` (#_codeA  `from` select allotmentT) .&& (sdata ! #_announceDateA ) `isIn` (#_announceDateA `from` select allotmentT) )
+                    -- just insert new code or new announceDateA
+                    restrict (not_ ( (sdata ! #_codeA) `isIn` (#_codeA  `from` select allotmentT)) .|| not_ ((sdata ! #_announceDateA ) `isIn` (#_announceDateA `from` select allotmentT)) )
                     return sdata
               )
     pgCon

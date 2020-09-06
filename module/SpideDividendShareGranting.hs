@@ -132,7 +132,7 @@ onePageRight mlist mp howManyPort code = do
     if isJust mp
     then mkManagerSettings tlsSetting (Just $ SockSettingsSimple hostAddr (fromJust mp))
     else tlsManagerSettings
-  logOutM $ "spiding " ++ code ++ "right info with " ++ show mp ++ "\n"
+  logOutM $ "spiding " ++ code ++ " right info with " ++ show mp ++ "\n"
   requestSinaNoHead <- parseRequest $ sinaURL code
   let getpage mlist mp howManyPort stockCode  = do
         -- TypeApplications make you type less words, use @ !
@@ -151,6 +151,7 @@ onePageRight mlist mp howManyPort code = do
                     --putMVar syncM 'x'
                     mzero
                   otherwise -> putMVar mlist list
+              otherwise -> return ()
             getpage mlist mp howManyPort stockCode
           Right response ->  return response
           
