@@ -293,18 +293,19 @@ saveStockPrice threadId stockData = do
                    )
          pgCon
   logOutM $ "inserted " ++ show num ++ " rows into temp table\n"
-  enum <- try @SeldaError $
+  eMstockL <- try @SeldaError $
     runSeldaT (do -- insert into temp table,then queryInto stock table
                   -- for selda get no insert or ignore api
                   tryCreateTable stockPriceT
                   --insert stockPriceT stockData -- all inserted or none
                   -- liftIO $ getLine -- test exception
-                  queryInto stockPriceT $ do
+                  --queryInto stockPriceT $ do
+                  query  $ do
                     --or <- select stockPriceT
                     --tr <- select tempSPt
                     --restrict $ (or ! #_code ./= tr ! #_code) .|| (or ! #_date ./= tr ! #_date)
                     sR <-select tempSPt
-                    ssR <- leftJoin (\rC ->  ( (rC ! #_code .== sR ! #_code) .&& (rC ! #_date .== sR ! #_date) ) ) (do
+                    ssR <- leftJoin (\rC -> (rC ! #_code .== sR ! #_code) .&& (rC ! #_date .== sR ! #_date)  ) (do
                                                                                                                              ssdata <-select stockPriceT
                                                                                                                              restrict $ literal False
                                                                                                                              return ssdata
@@ -319,19 +320,30 @@ saveStockPrice threadId stockData = do
                     -- sdata <- inQ -- select tempSPt
                     -- -- just insert new code or new date
                     -- restrict (not_ ( (sdata ! #_code ) `isIn` (#_code  `from` select stockPriceT)) .|| not_ ( (sdata ! #_date ) `isIn` (#_date  `from` select stockPriceT)) )
-                    return  sR
+                    return  ssR
               )
     pgCon
-  num <- case enum of
+  stockL <- case eMstockL of
     Left e ->  do
       logOutM $ "exception : \n" ++ show e ++ ",\njust return 0 \n"
       -- strictly speaking, for safety if we don't use withPostgreSQL, we need handle every serious exception exit such as DbError 
       if toConstr e == toConstr ( DbError "anything")
         then (logOutM $ "Database issue!Stop program!\n") >> seldaClose pgCon >> mzero
         -- actually don't need seldaClose,selda will close automatically
-        else runSeldaT (dropTable tempSPt) pgCon >> return 0
-    Right n -> return n
-  logOutM $ "queryInto " ++ show num ++ " rows\n"
+        else runSeldaT (dropTable tempSPt) pgCon >> return [] -- >> return 0
+    Right mStockL -> return . fmap fromJust . DL.filter isJust $  mStockL
+  let number = DL.length stockL
+  logOutM $ "stockL get " ++ show num ++ " rows\n"
+  logOutM $ show stockL
+  num <- case number of
+    0 -> return 0
+    otherwise -> runSeldaT (do
+                       --tryDropTable tempSPt
+                       --createTable tempSPt
+                       insert stockPriceT stockL
+                   ) pgCon
+  logOutM $ "actually inserted " ++ show num ++ " rows into stock table\n"
+    
   runSeldaT (tryDropTable tempSPt) pgCon
   --traceM $ "1st time ,inserted " <> show num <> " rows"
   --num <- runSeldaT (upsert stockPriceT (\_ -> literal True) (\row -> row ) stockData) pgCon
