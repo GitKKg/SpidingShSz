@@ -285,38 +285,20 @@ saveStockPrice threadId stockData = do
 
   -- queryInto :: (MonadSelda m, Relational a) => Table a -> Query (Backend m) (Row (Backend m) a) -> m Int
   -- different thread use different id,or else make conflict when drop or insert table with same name at the same time
-  let tempSPt  = table (fromString $ "temSpt" ++ threadId) [#_code :+ #_date :- unique]
-  let stockPriceTBak  = table (fromString $ "temSpt" ++ threadId) [#_code :+ #_date :- unique]
+  --let tempSPt  = table (fromString $ "temSpt" ++ threadId) [#_code :+ #_date :- unique]
+
+  -- distinct with table receate method seem not work, and cost really much on Hard disk usage
+  -- have to use try insert one by one way
   num <- runSeldaT (do
-                       tryDropTable tempSPt
-                       tryDropTable stockPriceTBak
-                       createTable tempSPt
-                       createTable stockPriceTBak
-                       insert tempSPt stockData
+                       boolL <- traverse ((tryInsert stockPriceT) . (: [])) stockData
+                       return . DL.length . (DL.filter (\x -> x == True) ) $  boolL
+
                    )
+                                              
+                   
          pgCon
-  logOutM $ "inserted " ++ show num ++ " rows into temp table\n"
-  eMstockL <- try @SeldaError $
-    runSeldaT (do -- insert into temp table,then queryInto stock table
-                  -- for selda get no insert or ignore api
-                  tryCreateTable stockPriceT
-                  tryCreateTable stockPriceTBak
-                  --insert stockPriceT stockData -- all inserted or none
-                  -- liftIO $ getLine -- test exception
-                  --queryInto stockPriceT $ do
-                  queryInto stockPriceTBak $ do
-                    distinct $ do
-                      select tempSPt
-                      select stockPriceT
-                  dropTable stockPriceT
-                  createTable stockPriceT
-                  queryInto stockPriceT $ do
-                    select stockPriceTBak
-                  dropTable stockPriceTBak
-              )
-    pgCon
+  logOutM $ "inserted " ++ show num ++ " rows into stock table\n"
   
-  runSeldaT (tryDropTable tempSPt) pgCon
   --traceM $ "1st time ,inserted " <> show num <> " rows"
   --num <- runSeldaT (upsert stockPriceT (\_ -> literal True) (\row -> row ) stockData) pgCon
   --traceM $ "upsert " ++ show num ++ " rows"
