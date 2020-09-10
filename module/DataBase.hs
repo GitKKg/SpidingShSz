@@ -286,9 +286,12 @@ saveStockPrice threadId stockData = do
   -- queryInto :: (MonadSelda m, Relational a) => Table a -> Query (Backend m) (Row (Backend m) a) -> m Int
   -- different thread use different id,or else make conflict when drop or insert table with same name at the same time
   let tempSPt  = table (fromString $ "temSpt" ++ threadId) [#_code :+ #_date :- unique]
+  let stockPriceTBak  = table (fromString $ "temSpt" ++ threadId) [#_code :+ #_date :- unique]
   num <- runSeldaT (do
                        tryDropTable tempSPt
+                       tryDropTable stockPriceTBak
                        createTable tempSPt
+                       createTable stockPriceTBak
                        insert tempSPt stockData
                    )
          pgCon
@@ -297,53 +300,22 @@ saveStockPrice threadId stockData = do
     runSeldaT (do -- insert into temp table,then queryInto stock table
                   -- for selda get no insert or ignore api
                   tryCreateTable stockPriceT
+                  tryCreateTable stockPriceTBak
                   --insert stockPriceT stockData -- all inserted or none
                   -- liftIO $ getLine -- test exception
                   --queryInto stockPriceT $ do
-                  query  $ do
-                    --or <- select stockPriceT
-                    --tr <- select tempSPt
-                    --restrict $ (or ! #_code ./= tr ! #_code) .|| (or ! #_date ./= tr ! #_date)
-                    sR <-select tempSPt
-                    ssR <- leftJoin (\rC -> (rC ! #_code .== sR ! #_code) .&& (rC ! #_date .== sR ! #_date)  ) (do
-                                                                                                                             ssdata <-select stockPriceT
-                                                                                                                             restrict $ literal False
-                                                                                                                             return ssdata
-                                                                                                                         )
-                             
-                    
-                    --sdata <- innerJoin (\rC -> not_ ( (rC ! #_code .== tr ! #_code) .&& (rC ! #_date .== tr ! #_date) ) ) (select stockPriceT)
-                    -- let inQ=  select tempSPt
-                    -- inq <- inQ
-                    -- --outQ <- inner $ select stockPriceT
-                    -- innerJoin (\oca -> (oca ! #_code) .== (inq ! #_code) ) (select stockPriceT)
-                    -- sdata <- inQ -- select tempSPt
-                    -- -- just insert new code or new date
-                    -- restrict (not_ ( (sdata ! #_code ) `isIn` (#_code  `from` select stockPriceT)) .|| not_ ( (sdata ! #_date ) `isIn` (#_date  `from` select stockPriceT)) )
-                    return  ssR
+                  queryInto stockPriceTBak $ do
+                    distinct $ do
+                      select tempSPt
+                      select stockPriceT
+                  dropTable stockPriceT
+                  createTable stockPriceT
+                  queryInto stockPriceT $ do
+                    select stockPriceTBak
+                  dropTable stockPriceTBak
               )
     pgCon
-  stockL <- case eMstockL of
-    Left e ->  do
-      logOutM $ "exception : \n" ++ show e ++ ",\njust return 0 \n"
-      -- strictly speaking, for safety if we don't use withPostgreSQL, we need handle every serious exception exit such as DbError 
-      if toConstr e == toConstr ( DbError "anything")
-        then (logOutM $ "Database issue!Stop program!\n") >> seldaClose pgCon >> mzero
-        -- actually don't need seldaClose,selda will close automatically
-        else runSeldaT (dropTable tempSPt) pgCon >> return [] -- >> return 0
-    Right mStockL -> return . fmap fromJust . DL.filter isJust $  mStockL
-  let number = DL.length stockL
-  logOutM $ "stockL get " ++ show num ++ " rows\n"
-  logOutM $ show stockL
-  num <- case number of
-    0 -> return 0
-    otherwise -> runSeldaT (do
-                       --tryDropTable tempSPt
-                       --createTable tempSPt
-                       insert stockPriceT stockL
-                   ) pgCon
-  logOutM $ "actually inserted " ++ show num ++ " rows into stock table\n"
-    
+  
   runSeldaT (tryDropTable tempSPt) pgCon
   --traceM $ "1st time ,inserted " <> show num <> " rows"
   --num <- runSeldaT (upsert stockPriceT (\_ -> literal True) (\row -> row ) stockData) pgCon
