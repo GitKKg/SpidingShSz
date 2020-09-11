@@ -290,6 +290,7 @@ saveStockPrice threadId stockData = do
   -- distinct with table receate method seem not work, and cost really much on Hard disk usage
   -- have to use try insert one by one way
   num <- runSeldaT (do
+                       tryCreateTable stockPriceT
                        boolL <- traverse ((tryInsert stockPriceT) . (: [])) stockData
                        return . DL.length . (DL.filter (\x -> x == True) ) $  boolL
 
@@ -326,6 +327,7 @@ saveBonusInfo threadId bT = do
   -- queryInto :: (MonadSelda m, Relational a) => Table a -> Query (Backend m) (Row (Backend m) a) -> m Int
   -- different thread use different id,or else make conflict when drop or insert table with same name at the same time
   num <- runSeldaT (do
+                       tryCreateTable bonusInfoT
                        boolL <- traverse ((tryInsert bonusInfoT) . (: [])) bT
                        return . DL.length . (DL.filter (\x -> x == True) ) $  boolL
 
@@ -357,6 +359,7 @@ saveAllotmentInfo threadId aT = do
   -- queryInto :: (MonadSelda m, Relational a) => Table a -> Query (Backend m) (Row (Backend m) a) -> m Int
   -- different thread use different id,or else make conflict when drop or insert table with same name at the same time
   num <- runSeldaT (do
+                       tryCreateTable allotmentT
                        boolL <- traverse ((tryInsert allotmentT) . (: [])) aT
                        return . DL.length . (DL.filter (\x -> x == True) ) $  boolL
 
