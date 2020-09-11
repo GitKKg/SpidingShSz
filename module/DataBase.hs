@@ -325,41 +325,15 @@ saveBonusInfo threadId bT = do
 
   -- queryInto :: (MonadSelda m, Relational a) => Table a -> Query (Backend m) (Row (Backend m) a) -> m Int
   -- different thread use different id,or else make conflict when drop or insert table with same name at the same time
-  let tempBt  = table (fromString $ "temBonusT" ++ threadId) [#_codeB :+ #_announceDateB  :- unique]
   num <- runSeldaT (do
-                       tryDropTable tempBt
-                       createTable tempBt
-                       insert tempBt bT
+                       boolL <- traverse ((tryInsert bonusInfoT) . (: [])) bT
+                       return . DL.length . (DL.filter (\x -> x == True) ) $  boolL
+
                    )
+                                              
+                   
          pgCon
-  logOutM $ "inserted " ++ show num ++ " rows into temp table\n"
-  enum <- try @SeldaError $
-    runSeldaT (do -- insert into temp table,then queryInto stock table
-                  -- for selda get no insert or ignore api
-                  tryCreateTable bonusInfoT
-                  --insert stockPriceT stockData -- all inserted or none
-                  -- liftIO $ getLine -- test exception
-                  queryInto bonusInfoT $ do
-                    sdata <- select tempBt
-                    -- just inser new code or new announceDate
-                    restrict (not_ ( (sdata ! #_codeB) `isIn` (#_codeB  `from` select bonusInfoT)) .|| not_ ((sdata ! #_announceDateB ) `isIn` (#_announceDateB `from` select bonusInfoT)) )
-                    return sdata
-              )
-    pgCon
-  num <- case enum of
-    Left e ->  do
-      logOutM $ "exception : \n" ++ show e ++ ",\njust return 0"
-      -- strictly speaking, for safety if we don't use withPostgreSQL, we need handle every serious exception exit such as DbError 
-      if toConstr e == toConstr ( DbError "anything")
-        then (logOutM $ "Database issue!Stop program!\n") >> seldaClose pgCon >> mzero
-        -- actually don't need seldaClose,selda will close automatically
-        else runSeldaT (dropTable tempBt) pgCon >> return 0
-    Right n -> return n
-  logOutM $ "queryInto " ++ show num ++ " rows\n"
-  runSeldaT (tryDropTable tempBt) pgCon
-  --traceM $ "1st time ,inserted " <> show num <> " rows"
-  --num <- runSeldaT (upsert stockPriceT (\_ -> literal True) (\row -> row ) stockData) pgCon
-  --traceM $ "upsert " ++ show num ++ " rows"
+  logOutM $ "inserted " ++ show num ++ " rows into bonus table\n"
   seldaClose pgCon
   --traceM $ "inserted " <> show num <> " rows"
 
@@ -382,41 +356,15 @@ saveAllotmentInfo threadId aT = do
 
   -- queryInto :: (MonadSelda m, Relational a) => Table a -> Query (Backend m) (Row (Backend m) a) -> m Int
   -- different thread use different id,or else make conflict when drop or insert table with same name at the same time
-  let tempAt  = table (fromString $ "tempAllotmentT" ++ threadId) [#_codeA :+ #_announceDateA  :- unique]
   num <- runSeldaT (do
-                       tryDropTable tempAt
-                       createTable tempAt
-                       insert tempAt aT
+                       boolL <- traverse ((tryInsert allotmentT) . (: [])) aT
+                       return . DL.length . (DL.filter (\x -> x == True) ) $  boolL
+
                    )
+                                              
+                   
          pgCon
-  logOutM $ "inserted " ++ show num ++ " rows into temp table\n"
-  enum <- try @SeldaError $
-    runSeldaT (do -- insert into temp table,then queryInto stock table
-                  -- for selda get no insert or ignore api
-                  tryCreateTable allotmentT
-                  --insert stockPriceT stockData -- all inserted or none
-                  -- liftIO $ getLine -- test exception
-                  queryInto allotmentT $ do
-                    sdata <- select tempAt
-                    -- just insert new code or new announceDateA
-                    restrict (not_ ( (sdata ! #_codeA) `isIn` (#_codeA  `from` select allotmentT)) .|| not_ ((sdata ! #_announceDateA ) `isIn` (#_announceDateA `from` select allotmentT)) )
-                    return sdata
-              )
-    pgCon
-  num <- case enum of
-    Left e ->  do
-      logOutM $ "exception : \n" ++ show e ++ ",\njust return 0"
-      -- strictly speaking, for safety if we don't use withPostgreSQL, we need handle every serious exception exit such as DbError 
-      if toConstr e == toConstr ( DbError "anything")
-        then (logOutM $ "Database issue!Stop program!\n") >> seldaClose pgCon >> mzero
-        -- actually don't need seldaClose,selda will close automatically
-        else runSeldaT (dropTable tempAt) pgCon >> return 0
-    Right n -> return n
-  logOutM $ "queryInto " ++ show num ++ " rows\n"
-  runSeldaT (tryDropTable tempAt) pgCon
-  --traceM $ "1st time ,inserted " <> show num <> " rows"
-  --num <- runSeldaT (upsert stockPriceT (\_ -> literal True) (\row -> row ) stockData) pgCon
-  --traceM $ "upsert " ++ show num ++ " rows"
+  logOutM $ "inserted " ++ show num ++ " rows into  allotment table\n"
   seldaClose pgCon
   --traceM $ "inserted " <> show num <> " rows"
 
