@@ -162,7 +162,7 @@ getCYSList fp sy ss ey es =  do
 -- set error port could test mzero exception
 gpsDemo = do
   mlist <- newMVar [("000001" , 2020, 1)]
-  ee <- try @SomeException $ snd <$> (onePagePrice mlist (Just 10808) 10 "000001" 2020 1) >>= saveStockPrice "0"
+  ee <- try @SomeException $ snd <$> (onePagePrice mlist (Just 10808) 10 "000001" 2020 1 False) >>= saveStockPrice "0"
   case ee of
     Left e -> do
       logOutM $ "exception when onePagePrice! is \n" ++ show e ++ "\n it seems proxy thread demand out!\n"
@@ -272,7 +272,7 @@ main = do
           logOut log $ "less than 6s ,wait for " ++ show waitSec ++ "s\n"
           threadDelay $ waitSec * (10^6)
         -- evalState
-        ePInfo <- try @SomeException $ onePagePrice mlist mayPort (Prelude.length threadList) code year season
+        ePInfo <- try @SomeException $ onePagePrice mlist mayPort (Prelude.length threadList) code year season False
         case ePInfo of
           Left e -> do
             logOutM $ "exception when onePagePrice! is \n" ++ show e ++ "\n it seems proxy thread demand out!\n"
