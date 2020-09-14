@@ -177,6 +177,10 @@ insertThenInspect = do
 -- /usr/lib/postgresql/12/bin$ ./pg_ctl -D /media/sdb1/PgSqlDB/stockDB -l /media/sdb1/PgSqlDB/log/stockDb.log start  , stop
 -- if start failied with permmsion denied:
 -- sudo chown -R kyle /var/run/postgresql , kyle here is your login user name
+-- sudo systemctl stop postgresql@11-main.service
+-- sudo systemctl disable postgresql@11-main.service
+-- sudo systemctl stop postgresql@12-main.service
+-- sudo systemctl disable postgresql@12-main.service
 
 -- sudo su - postgres -c "createuser Kant --createdb"
 -- sudo emacs /etc/postgresql/12/main/pg_hba.conf
@@ -387,3 +391,51 @@ getStockCodes fp = do
     rmShitStock code = not $ (=~) @String @String @Bool code "^2|^3|^9|^010^019|^1|^4|^5|^7|^8"
     -- another way, use negative match
     --rmShitStock code =  (=~) @String @String @Bool code "^[^(2|3|9)]"
+
+getLatestDatePT :: String ->  IO (Maybe Int)
+getLatestDatePT code = do
+  pgCon <- pgOpen pgConnectInfo
+  dateInNum <- runSeldaT (do
+                       tryCreateTable stockPriceT
+                       date <- query $ do
+                         stockL <- select stockPriceT
+                         restrict (stockL ! #_code .== literal (pack code))
+                         order (stockL ! #_date) descending
+                         return $ stockL ! #_date
+                       if DL.length date /= 0
+                         then return . Just $ date !! 0
+                         else return Nothing
+                       ) pgCon
+  return dateInNum
+
+getLatestDateBT :: String ->  IO (Maybe Int)
+getLatestDateBT code = do
+  pgCon <- pgOpen pgConnectInfo
+  dateInNum <- runSeldaT (do
+                       tryCreateTable bonusInfoT
+                       date <- query $ do
+                         stockL <- select bonusInfoT
+                         restrict (stockL ! #_codeB .== literal (pack code))
+                         order (stockL ! #_announceDateB) descending
+                         return $ stockL ! #_announceDateB
+                       if DL.length date /= 0
+                         then return . Just $ date !! 0
+                         else return Nothing
+                       ) pgCon
+  return dateInNum
+
+getLatestDateAT :: String ->  IO (Maybe Int)
+getLatestDateAT code = do
+  pgCon <- pgOpen pgConnectInfo
+  dateInNum <- runSeldaT (do
+                       tryCreateTable allotmentT
+                       date <- query $ do
+                         stockL <- select allotmentT
+                         restrict (stockL ! #_codeA .== literal (pack code))
+                         order (stockL ! #_announceDateA) descending
+                         return $ stockL ! #_announceDateA
+                       if DL.length date /= 0
+                         then return . Just $ date !! 0
+                         else return Nothing
+                       ) pgCon
+  return dateInNum
