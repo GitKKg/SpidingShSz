@@ -408,8 +408,10 @@ getLatestDatePT code = do
                        ) pgCon
   return dateInNum
 
-getLatestDateBT :: String ->  IO (Maybe Int)
-getLatestDateBT code = do
+
+-- should tranverse List of announceDate and recordDate from the latest to earliest ,to update factors of prices zone by zone,and zone is divided by these date groups
+getLatestAnDateBT :: String ->  IO (Maybe Int)
+getLatestAnDateBT code = do
   pgCon <- pgOpen pgConnectInfo
   dateInNum <- runSeldaT (do
                        tryCreateTable bonusInfoT
@@ -424,8 +426,8 @@ getLatestDateBT code = do
                        ) pgCon
   return dateInNum
 
-getLatestDateAT :: String ->  IO (Maybe Int)
-getLatestDateAT code = do
+getLatestAnDateAT :: String ->  IO (Maybe Int)
+getLatestAnDateAT code = do
   pgCon <- pgOpen pgConnectInfo
   dateInNum <- runSeldaT (do
                        tryCreateTable allotmentT
@@ -434,6 +436,38 @@ getLatestDateAT code = do
                          restrict (stockL ! #_codeA .== literal (pack code))
                          order (stockL ! #_announceDateA) descending
                          return $ stockL ! #_announceDateA
+                       if DL.length date /= 0
+                         then return . Just $ date !! 0
+                         else return Nothing
+                       ) pgCon
+  return dateInNum
+
+getLatestReDateBT :: String ->  IO (Maybe Int)
+getLatestReDateBT code = do
+  pgCon <- pgOpen pgConnectInfo
+  dateInNum <- runSeldaT (do
+                       tryCreateTable bonusInfoT
+                       date <- query $ do
+                         stockL <- select bonusInfoT
+                         restrict (stockL ! #_codeB .== literal (pack code))
+                         order (stockL ! #_recordDateB) descending
+                         return $ stockL ! #_recordDateB
+                       if DL.length date /= 0
+                         then return . Just $ date !! 0
+                         else return Nothing
+                       ) pgCon
+  return dateInNum
+
+getLatestReDateAT :: String ->  IO (Maybe Int)
+getLatestReDateAT code = do
+  pgCon <- pgOpen pgConnectInfo
+  dateInNum <- runSeldaT (do
+                       tryCreateTable allotmentT
+                       date <- query $ do
+                         stockL <- select allotmentT
+                         restrict (stockL ! #_codeA .== literal (pack code))
+                         order (stockL ! #_recordDateA) descending
+                         return $ stockL ! #_recordDateA
                        if DL.length date /= 0
                          then return . Just $ date !! 0
                          else return Nothing
