@@ -392,8 +392,8 @@ getStockCodes fp = do
     -- another way, use negative match
     --rmShitStock code =  (=~) @String @String @Bool code "^[^(2|3|9)]"
 
-getLatestDatePT :: String ->  IO (Maybe Int)
-getLatestDatePT code = do
+getLatestDate :: String ->  IO (Maybe Int)
+getLatestDate code = do
   pgCon <- pgOpen pgConnectInfo
   dateInNum <- runSeldaT (do
                        tryCreateTable stockPriceT
@@ -406,12 +406,13 @@ getLatestDatePT code = do
                          then return . Just $ date !! 0
                          else return Nothing
                        ) pgCon
+  seldaClose pgCon
   return dateInNum
 
 
 -- should tranverse List of announceDate and recordDate from the latest to earliest ,to update factors of prices zone by zone,and zone is divided by these date groups
-getLatestAnDateBT :: String ->  IO (Maybe Int)
-getLatestAnDateBT code = do
+getAnDateLbt :: String ->  IO (Maybe [Int])
+getAnDateLbt code = do
   pgCon <- pgOpen pgConnectInfo
   dateInNum <- runSeldaT (do
                        tryCreateTable bonusInfoT
@@ -421,13 +422,15 @@ getLatestAnDateBT code = do
                          order (stockL ! #_announceDateB) descending
                          return $ stockL ! #_announceDateB
                        if DL.length date /= 0
-                         then return . Just $ date !! 0
+                         then return . Just $ date -- !! 0
                          else return Nothing
                        ) pgCon
+
+  seldaClose pgCon
   return dateInNum
 
-getLatestAnDateAT :: String ->  IO (Maybe Int)
-getLatestAnDateAT code = do
+getAnDateLat :: String ->  IO (Maybe [Int])
+getAnDateLat code = do
   pgCon <- pgOpen pgConnectInfo
   dateInNum <- runSeldaT (do
                        tryCreateTable allotmentT
@@ -437,13 +440,15 @@ getLatestAnDateAT code = do
                          order (stockL ! #_announceDateA) descending
                          return $ stockL ! #_announceDateA
                        if DL.length date /= 0
-                         then return . Just $ date !! 0
+                         then return . Just $ date  -- !! 0
                          else return Nothing
                        ) pgCon
+
+  seldaClose pgCon
   return dateInNum
 
-getLatestReDateBT :: String ->  IO (Maybe Int)
-getLatestReDateBT code = do
+getReDateLbt :: String ->  IO (Maybe [Int])
+getReDateLbt code = do
   pgCon <- pgOpen pgConnectInfo
   dateInNum <- runSeldaT (do
                        tryCreateTable bonusInfoT
@@ -453,13 +458,14 @@ getLatestReDateBT code = do
                          order (stockL ! #_recordDateB) descending
                          return $ stockL ! #_recordDateB
                        if DL.length date /= 0
-                         then return . Just $ date !! 0
+                         then return . Just $ date -- !! 0
                          else return Nothing
                        ) pgCon
+  seldaClose pgCon
   return dateInNum
 
-getLatestReDateAT :: String ->  IO (Maybe Int)
-getLatestReDateAT code = do
+getReDateLat :: String ->  IO (Maybe [Int])
+getReDateLat code = do
   pgCon <- pgOpen pgConnectInfo
   dateInNum <- runSeldaT (do
                        tryCreateTable allotmentT
@@ -469,7 +475,30 @@ getLatestReDateAT code = do
                          order (stockL ! #_recordDateA) descending
                          return $ stockL ! #_recordDateA
                        if DL.length date /= 0
-                         then return . Just $ date !! 0
+                         then return . Just $ date -- !! 0
                          else return Nothing
                        ) pgCon
+  seldaClose pgCon
   return dateInNum
+
+-- for ordered lists ,merge sorts
+merge :: Ord a => [a] -> [a] -> [a]
+merge (x:xs) (y:ys) = if x < y
+                        then x:(merge xs (y:ys))
+                        else y:(merge (x:xs) ys)
+merge [] xs = xs
+merge xs [] = xs
+
+
+updateAverage :: IO (Int)
+updateAverage = do
+  withPostgreSQL @IO  pgConnectInfo $ do
+    tryCreateTable stockPriceT
+    --codeL <- query $ do
+    --  _code `from` select stockPriceT
+    update stockPriceT (const $ literal True)
+      (\r -> r `with` [ #_average :=   (r ! #_value) * 100000 /  (r ! #_shares)  ] )
+      -- value in in 10 thousnad RMB Yuan
+      -- shares in 100, one hand stock, so 10000/100 = 100
+      -- mul to more 1000 to get 3 decimal digital space 
+    
