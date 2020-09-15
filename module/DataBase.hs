@@ -481,6 +481,41 @@ getReDateLat code = do
   seldaClose pgCon
   return dateInNum
 
+getExDateLat :: String ->  IO (Maybe [Int])
+getExDateLat code = do
+  pgCon <- pgOpen pgConnectInfo
+  dateInNum <- runSeldaT (do
+                       tryCreateTable allotmentT
+                       date <- query $ do
+                         stockL <- select allotmentT
+                         restrict (stockL ! #_codeA .== literal (pack code))
+                         order (stockL ! #_exRightDateA) descending
+                         return $ stockL ! #_exRightDateA
+                       if DL.length date /= 0
+                         then return . Just $ date -- !! 0
+                         else return Nothing
+                       ) pgCon
+  seldaClose pgCon
+  return dateInNum
+
+getExDateLbt :: String ->  IO (Maybe [Int])
+getExDateLbt code = do
+  pgCon <- pgOpen pgConnectInfo
+  dateInNum <- runSeldaT (do
+                       tryCreateTable bonusInfoT
+                       date <- query $ do
+                         stockL <- select bonusInfoT
+                         restrict (stockL ! #_codeB .== literal (pack code))
+                         order (stockL ! #_exRightDateB) descending
+                         return $ stockL ! #_exRightDateB
+                       if DL.length date /= 0
+                         then return . Just $ date -- !! 0
+                         else return Nothing
+                       ) pgCon
+  seldaClose pgCon
+  return dateInNum
+
+
 -- for ordered lists ,merge sorts
 merge :: Ord a => [a] -> [a] -> [a]
 merge (x:xs) (y:ys) = if x < y
@@ -500,5 +535,24 @@ updateAverage = do
       (\r -> r `with` [ #_average :=   (r ! #_value) * 100000 /  (r ! #_shares)  ] )
       -- value in in 10 thousnad RMB Yuan
       -- shares in 100, one hand stock, so 10000/100 = 100
-      -- mul to more 1000 to get 3 decimal digital space 
+      -- mul to more 1000 to get 3 decimal digital space
+      -- Col s a get instance of Num and Fractional, so * 100000  and / are available
     
+data ABdate = AllotDate | BonusDate deriving Eq
+
+data DateL = DateL {
+  _whatTab :: ABdate,
+  _dateT :: Int
+                   } deriving Eq
+
+getCodes = getStockCodes "./module/sinaCodes"
+
+getExRightDateL :: IO ([DateL])
+getExRightDateL = do
+  withPostgreSQL @IO pgConnectInfo $ do
+    tryCreateTable allotmentT
+    tryCreateTable bonusInfoT
+    -- SeldaT b IO a get instance MonadIO,so liftIO is available
+    dl <- liftIO $ getExDateLbt "000001"
+    codeL <- liftIO getCodes
+    return $ [DateL AllotDate 0]
