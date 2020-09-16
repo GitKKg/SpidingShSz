@@ -52,19 +52,30 @@ newName = state $ \i -> ("x" ++ show i, i + 1)
 x8Name = evalState (newName >> newName >> newName) 6 -- newName is calculated 3 times,and intial state is 6, so state is 6+2 =8, and evalue output a is "x8"
 -- "x8"
 
+-- this is normal way like constructor
 nameT :: StateT Int IO String
 nameT = StateT $ \i -> return ("x" ++ show i, i + 1)
 
 x8NameT = runStateT  (nameT >> nameT >> nameT) 6
 
+-- this is monad way like constructor
 tickT :: StateT Int IO Int
-tickT = do
+tickT = do -- do represent you are in a monad
   n <- get
-  traceShowM n
+  traceShowM $ "state " ++ show n
   put (n+1)
   return n
 plusT :: Int -> Int -> IO Int
 plusT n x = execStateT (sequence $ replicate n tickT) x
+-- :t sequence $ replicate 2 tickT
+-- sequence $ replicate 2 tickT :: StateT Int IO [Int]
+-- sequence here just generate another StateT type data,also a monad too,just like
+-- return [1] >> return [2] >> return [3] get type :: m [a]
+-- execStateT (sequence $ replicate 2 tickT) 3 get type :: IO Int
+-- and actually is tickT >> tickT
+-- but not like return [1,2,3] ,and just like return [1] >> return [2]
+-- and but evalStateT (sequence $ replicate 2 tickT) 3 get type :: IO [Int]
+-- the essential semantical means of traverse or mapM is to make [a] to [[a]] first ,the execute >> on thesese [a] ,finally get a m [a] 
 
 tick :: State Int Int
 tick = do n <- get

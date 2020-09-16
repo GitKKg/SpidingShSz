@@ -518,7 +518,7 @@ getExDateLbt code = do
 
 -- for ordered lists ,merge sorts
 merge :: Ord a => [a] -> [a] -> [a]
-merge (x:xs) (y:ys) = if x < y
+merge (x:xs) (y:ys) = if x > y
                         then x:(merge xs (y:ys))
                         else y:(merge (x:xs) ys)
 merge [] xs = xs
@@ -538,21 +538,35 @@ updateAverage = do
       -- mul to more 1000 to get 3 decimal digital space
       -- Col s a get instance of Num and Fractional, so * 100000  and / are available
     
-data ABdate = AllotDate | BonusDate deriving Eq
+data ABexDate = AllotExDate | BonusExDate deriving (Eq,Show)
 
-data DateL = DateL {
-  _whatTab :: ABdate,
+data ExDate = ExDate {
+  _whatTab :: ABexDate,
   _dateT :: Int
-                   } deriving Eq
+                   }
+instance Show ExDate where
+  show dal = "ExDate " ++ (show . _whatTab) dal ++ " " ++ (show . _dateT) dal ++ "\n"
+instance Eq ExDate where
+  da == db = _dateT da == _dateT db
+
+instance Ord ExDate where
+  da <= db = _dateT da <= _dateT db
 
 getCodes = getStockCodes "./module/sinaCodes"
 
-getExRightDateL :: IO ([DateL])
-getExRightDateL = do
-  withPostgreSQL @IO pgConnectInfo $ do
-    tryCreateTable allotmentT
-    tryCreateTable bonusInfoT
-    -- SeldaT b IO a get instance MonadIO,so liftIO is available
-    dl <- liftIO $ getExDateLbt "000001"
-    codeL <- liftIO getCodes
-    return $ [DateL AllotDate 0]
+getExRightDateL :: String -> IO ([ExDate])
+getExRightDateL code = do
+    bl <- getExDateLbt code
+    let dbl = case isJust bl of
+          True -> ExDate BonusExDate <$> fromJust bl
+          False ->  []
+    al <- getExDateLat code
+    let dal = case isJust al of
+          True -> ExDate AllotExDate <$> fromJust al
+          False ->  []
+    return $ merge dal dbl
+    -- al <- liftIO $ getExExDateat "000001"
+    -- codeL <- liftIO getCodes
+    
+    -- --return $ merge dal dbl
+    -- return $ [ExDate AllotDate 0]
