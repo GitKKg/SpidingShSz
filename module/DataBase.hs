@@ -42,6 +42,8 @@ import DebugLogM
 
 import qualified Data.Set as DS 
 
+import Control.Monad.State
+import Control.Monad.State.Lazy
 
 data Stock = Stock  -- the field member name must be exact same with field of table in database which already exist
 -- order no matter, just parts no matter, only name and type matter
@@ -489,7 +491,7 @@ getExDateLat code = do
                        date <- query $ do
                          stockL <- select allotmentT
                          restrict (stockL ! #_codeA .== literal (pack code))
-                         order (stockL ! #_exRightDateA) descending
+                         order (stockL ! #_exRightDateA) ascending
                          return $ stockL ! #_exRightDateA
                        if DL.length date /= 0
                          then return . Just $ date -- !! 0
@@ -506,7 +508,7 @@ getExDateLbt code = do
                        date <- query $ do
                          stockL <- select bonusInfoT
                          restrict (stockL ! #_codeB .== literal (pack code))
-                         order (stockL ! #_exRightDateB) descending
+                         order (stockL ! #_exRightDateB) ascending
                          return $ stockL ! #_exRightDateB
                        if DL.length date /= 0
                          then return . Just $ date -- !! 0
@@ -518,7 +520,7 @@ getExDateLbt code = do
 
 -- for ordered lists ,merge sorts
 merge :: Ord a => [a] -> [a] -> [a]
-merge (x:xs) (y:ys) = if x > y
+merge (x:xs) (y:ys) = if x < y
                         then x:(merge xs (y:ys))
                         else y:(merge (x:xs) ys)
 merge [] xs = xs
@@ -564,9 +566,31 @@ getExRightDateL code = do
     let dal = case isJust al of
           True -> ExDate AllotExDate <$> fromJust al
           False ->  []
-    return $ merge dal dbl
-    -- al <- liftIO $ getExExDateat "000001"
-    -- codeL <- liftIO getCodes
+    -- return . DL.filter (\x -> _dateT x /= 0) $ merge  dal dbl
+    -- only care 2006 07 01 after
+    return . DL.filter (\x -> _dateT x >= 20060701) $ merge  dal dbl
     
-    -- --return $ merge dal dbl
-    -- return $ [ExDate AllotDate 0]
+
+
+-- some demos of StateT for inspiration to transfer fuquan factor value between every date of price
+
+factorT :: StateT Int IO String
+factorT = StateT $ \i -> return ("Factor is " ++ show i, i + 1)
+
+dateToFactorT :: Int -> StateT Int IO Int
+dateToFactorT date = do
+  sta <- get
+  if odd date
+    then do
+    traceM $ "Factor was " ++ show sta ++ ", now updated to " ++ show date
+    put date
+    return date
+    else do
+    traceM $ "Factor was " ++ show sta ++ ", now updated to 0 "
+    put 0
+    return 0
+
+-- just like sequence in plus in Main.hs, there get hidden >> operations in mapM,so StateT Int IO as monad ,could keep state
+testDateL = [1,2,3,4,5,6]
+testDFT = evalStateT (mapM dateToFactorT testDateL) 0
+-- [1,0,3,0,5,0]

@@ -75,7 +75,7 @@ plusT n x = execStateT (sequence $ replicate n tickT) x
 -- and actually is tickT >> tickT
 -- but not like return [1,2,3] ,and just like return [1] >> return [2]
 -- and but evalStateT (sequence $ replicate 2 tickT) 3 get type :: IO [Int]
--- the essential semantical means of traverse or mapM is to make [a] to [[a]] first ,the execute >> on thesese [a] ,finally get a m [a] 
+-- the essential semantical means of traverse or mapM is to make [a] to [[a]] first ,then execute >> on thesese [a] ,finally get a m [a] 
 
 tick :: State Int Int
 tick = do n <- get
