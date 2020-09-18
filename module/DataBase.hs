@@ -518,6 +518,16 @@ getExDateLbt code = do
   return dateInNum
 
 
+getPrDateL :: String -> IO [Int]
+getPrDateL code = do
+  withPostgreSQL @IO  pgConnectInfo $ do
+    tryCreateTable stockPriceT
+    query $ do
+      dl <- #_date `from` select stockPriceT
+      order dl ascending
+      return dl
+
+
 -- for ordered lists ,merge sorts
 merge :: Ord a => [a] -> [a] -> [a]
 merge (x:xs) (y:ys) = if x < y
@@ -540,31 +550,31 @@ updateAverage = do
       -- mul to more 1000 to get 3 decimal digital space
       -- Col s a get instance of Num and Fractional, so * 100000  and / are available
     
-data ABexDate = AllotExDate | BonusExDate deriving (Eq,Show)
+data ABRcDate = AllotRcDate | BonusRcDate deriving (Eq,Show)
 
-data ExDate = ExDate {
-  _whatTab :: ABexDate,
+data RcDate = RcDate {
+  _whatTab :: ABRcDate,
   _dateT :: Int
                    }
-instance Show ExDate where
-  show dal = "ExDate " ++ (show . _whatTab) dal ++ " " ++ (show . _dateT) dal ++ "\n"
-instance Eq ExDate where
+instance Show RcDate where
+  show dal = "RcDate " ++ (show . _whatTab) dal ++ " " ++ (show . _dateT) dal ++ "\n"
+instance Eq RcDate where
   da == db = _dateT da == _dateT db
 
-instance Ord ExDate where
+instance Ord RcDate where
   da <= db = _dateT da <= _dateT db
 
 getCodes = getStockCodes "./module/sinaCodes"
 
-getExRightDateL :: String -> IO ([ExDate])
-getExRightDateL code = do
-    bl <- getExDateLbt code
+getRcRightDateL :: String -> IO ([RcDate])
+getRcRightDateL code = do
+    bl <- getReDateLbt code
     let dbl = case isJust bl of
-          True -> ExDate BonusExDate <$> fromJust bl
+          True -> RcDate BonusRcDate <$> fromJust bl
           False ->  []
-    al <- getExDateLat code
+    al <- getReDateLat code
     let dal = case isJust al of
-          True -> ExDate AllotExDate <$> fromJust al
+          True -> RcDate AllotRcDate <$> fromJust al
           False ->  []
     -- return . DL.filter (\x -> _dateT x /= 0) $ merge  dal dbl
     -- only care 2006 07 01 after
@@ -594,3 +604,105 @@ dateToFactorT date = do
 testDateL = [1,2,3,4,5,6]
 testDFT = evalStateT (mapM dateToFactorT testDateL) 0
 -- [1,0,3,0,5,0]
+
+dateElem :: Int -> [RcDate] -> Bool
+dateElem date rcDl = elem date $ (\x -> _dateT x) <$>  rcDl
+-- another implement
+dateElem2 date rcDl = DL.foldr (\a b -> b || _dateT a == date ) False rcDl
+
+testDateElem = return . dateElem 20180712 =<< getRcRightDateL "000001"
+
+dateIndrc :: Int -> [RcDate] -> Int
+dateIndrc date rcDl = fromJust . DL.elemIndex date $ (\x -> _dateT x) <$>  rcDl
+
+getClose :: String -> Int -> IO Int
+getClose code date =
+  fmap DL.head $ withPostgreSQL @IO pgConnectInfo $ do
+  tryCreateTable stockPriceT
+  query $ do
+    stockL <- select stockPriceT
+    restrict ( stockL ! #_code .== (literal . pack) code .&& stockL ! #_date .== literal date)
+    return $ stockL ! #_close
+
+getDividend :: String -> Int -> IO Int
+getDividend code date =
+  fmap DL.head $ withPostgreSQL @IO pgConnectInfo $ do
+  tryCreateTable bonusInfoT
+  query $ do
+    stockL <- select bonusInfoT
+    restrict ( stockL ! #_codeB .== (literal . pack) code .&& stockL ! #_recordDateB .== literal date)
+    return $ stockL ! #_dividend
+
+getBonusSharesRatio :: String -> Int -> IO Int
+getBonusSharesRatio code date =
+  fmap DL.head $ withPostgreSQL @IO pgConnectInfo $ do
+  tryCreateTable bonusInfoT
+  query $ do
+    stockL <- select bonusInfoT
+    restrict ( stockL ! #_codeB .== (literal . pack) code .&& stockL ! #_recordDateB .== literal date)
+    return $ stockL ! #_bonusSharesRatio
+
+getSharesTranscent :: String -> Int -> IO Int
+getSharesTranscent code date =
+  fmap DL.head $ withPostgreSQL @IO pgConnectInfo $ do
+  tryCreateTable bonusInfoT
+  query $ do
+    stockL <- select bonusInfoT
+    restrict ( stockL ! #_codeB .== (literal . pack) code .&& stockL ! #_recordDateB .== literal date)
+    return $ stockL ! #_sharesTranscent
+
+getOfferPrice :: String -> Int -> IO Int
+getOfferPrice code date =
+  fmap DL.head $ withPostgreSQL @IO pgConnectInfo $ do
+  tryCreateTable allotmentT
+  query $ do
+    stockL <- select allotmentT
+    restrict ( stockL ! #_codeA .== (literal . pack) code .&& stockL ! #_recordDateA .== literal date)
+    return $ stockL ! #_offerPrice
+
+getAllotRatio :: String -> Int -> IO Int
+getAllotRatio code date =
+  fmap DL.head $ withPostgreSQL @IO pgConnectInfo $ do
+  tryCreateTable allotmentT
+  query $ do
+    stockL <- select allotmentT
+    restrict ( stockL ! #_codeA .== (literal . pack) code .&& stockL ! #_recordDateA .== literal date)
+    return $ stockL ! #_allotRatio
+
+updateFactor :: String -> Int -> Int -> IO Int
+updateFactor code date factor =
+  withPostgreSQL @IO pgConnectInfo $ do
+  tryCreateTable stockPriceT
+  update stockPriceT (\r -> r ! #_code .== (literal . pack) code .&&  r ! #_date .== literal date ) (\r -> r `with` [  #_factor := literal factor ])
+
+stateFactor :: String -> Int -> [RcDate] -> StateT Int IO () -- factor is Int
+stateFactor code prDate rcDl = do
+  factor <- get
+  case dateElem prDate rcDl of
+    True -> do
+      let dIndrc = dateIndrc prDate rcDl
+      case _whatTab (rcDl !! dIndrc) == BonusRcDate of
+        True -> do
+          rcClose <- liftIO $ getClose code prDate
+          dividend <- liftIO $ getDividend code prDate
+          bonusSharesRatio <- liftIO $ getBonusSharesRatio code prDate
+          sharesTranscent <- liftIO $ getSharesTranscent code prDate
+          let rcPrice = fromIntegral @_ @Float (rcClose - 100 * dividend) / (1+ fromIntegral @_ @Float bonusSharesRatio/10 + fromIntegral @_ @Float sharesTranscent/10)
+          let currentFactor = fromIntegral @_ @Float rcClose / rcPrice
+          let newFactor =  floor $ fromIntegral @_ @Float factor * currentFactor
+          liftIO $ updateFactor code prDate newFactor
+          put newFactor
+        False -> do
+          rcClose <- liftIO $ getClose code prDate
+          allotRatio <- liftIO $ getAllotRatio code prDate
+          offerPrice <- liftIO $ getOfferPrice code prDate
+          let rcPrice = (fromIntegral @_ @Float rcClose  +  1000 * fromIntegral @_ @Float offerPrice * fromIntegral @_ @Float allotRatio/10) / (1 + fromIntegral @_ @Float allotRatio/10 )
+          let currentFactor = fromIntegral @_ @Float rcClose / rcPrice
+          let newFactor =  floor $ fromIntegral @_ @Float factor * currentFactor
+          liftIO $ updateFactor code prDate newFactor
+          put newFactor
+
+    False -> do
+      liftIO $ updateFactor code prDate factor
+      return ()
+      ---return ()
