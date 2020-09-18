@@ -612,8 +612,8 @@ dateElem2 date rcDl = DL.foldr (\a b -> b || _dateT a == date ) False rcDl
 
 testDateElem = return . dateElem 20180712 =<< getRcRightDateL "000001"
 
-dateIndrc :: Int -> [RcDate] -> Int
-dateIndrc date rcDl = fromJust . DL.elemIndex date $ (\x -> _dateT x) <$>  rcDl
+dateIndex :: Int -> [RcDate] -> Int
+dateIndex date rcDl = fromJust . DL.elemIndex date $ (\x -> _dateT x) <$>  rcDl
 
 getClose :: String -> Int -> IO Int
 getClose code date =
@@ -680,8 +680,8 @@ stateFactor code prDate rcDl = do
   factor <- get
   case dateElem prDate rcDl of
     True -> do
-      let dIndrc = dateIndrc prDate rcDl
-      case _whatTab (rcDl !! dIndrc) == BonusRcDate of
+      let dIndex = dateIndex prDate rcDl
+      case _whatTab (rcDl !! dIndex) == BonusRcDate of
         True -> do
           rcClose <- liftIO $ getClose code prDate
           dividend <- liftIO $ getDividend code prDate
