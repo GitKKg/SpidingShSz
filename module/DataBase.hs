@@ -457,7 +457,7 @@ getReDateLbt code = do
                        date <- query $ do
                          stockL <- select bonusInfoT
                          restrict (stockL ! #_codeB .== literal (pack code))
-                         order (stockL ! #_recordDateB) descending
+                         order (stockL ! #_recordDateB) ascending
                          return $ stockL ! #_recordDateB
                        if DL.length date /= 0
                          then return . Just $ date -- !! 0
@@ -474,7 +474,7 @@ getReDateLat code = do
                        date <- query $ do
                          stockL <- select allotmentT
                          restrict (stockL ! #_codeA .== literal (pack code))
-                         order (stockL ! #_recordDateA) descending
+                         order (stockL ! #_recordDateA) ascending
                          return $ stockL ! #_recordDateA
                        if DL.length date /= 0
                          then return . Just $ date -- !! 0
@@ -566,6 +566,7 @@ instance Ord RcDate where
 
 getCodes = getStockCodes "./module/sinaCodes"
 
+-- company with checkRcDate
 getRcRightDateL :: String -> IO ([RcDate])
 getRcRightDateL code = do
     bl <- getReDateLbt code
@@ -675,6 +676,32 @@ updateFactor code date factor =
   tryCreateTable stockPriceT
   update stockPriceT (\r -> r ! #_code .== (literal . pack) code .&&  r ! #_date .== literal date ) (\r -> r `with` [  #_factor := literal factor ])
 
+-- need to check if all record date are in price date,for some shit stock just suspend in record day in very rare possiblity, so if not, should correct such record date to price day just next to it
+-- company with getRcRightDateL
+checkRcDate :: String -> [RcDate] -> IO [RcDate]
+checkRcDate code rcL = do
+  mapM assureRcInPrDl rcL where
+    assureRcInPrDl rc = do
+      prDl <- getPrDateL code
+      case _dateT rc `elem` prDl of
+        True -> return rc
+        -- the emergence of "where" level by level represent the thought process how you concrete the process to solve the issue step by step also level by level, naming help you anchor when you are in the middle of the thinking
+        False -> do
+          traceM $ "got fucking suspended in Record date! code is " ++ show code ++ ",date is " ++ show rc
+          rightDate <- correctRcDate code (_dateT rc)
+          return $ RcDate (_whatTab rc) rightDate
+
+-- haskell get this bug, if get where embed where, the code after last where outside of the block (here is stateFactor function below) will get indent issue, so have to put last where as global function,here is correctRcDate 
+correctRcDate code date =
+  withPostgreSQL @IO pgConnectInfo $ do
+    tryCreateTable stockPriceT
+    dl <- query $ do
+      stockL <- select stockPriceT
+      restrict $ (stockL ! #_code .== literal (pack code)) .&& (stockL ! #_date .> literal  date)
+      order (stockL ! #_date) ascending
+      return $ stockL ! #_date
+    return $ dl !! 0
+                    
 stateFactor :: String -> Int -> [RcDate] -> StateT Int IO () -- factor is Int
 stateFactor code prDate rcDl = do
   factor <- get
@@ -690,8 +717,8 @@ stateFactor code prDate rcDl = do
           let rcPrice = fromIntegral @_ @Float (rcClose - 100 * dividend) / (1+ fromIntegral @_ @Float bonusSharesRatio/10 + fromIntegral @_ @Float sharesTranscent/10)
           let currentFactor = fromIntegral @_ @Float rcClose / rcPrice
           let newFactor =  floor $ fromIntegral @_ @Float factor * currentFactor
-          liftIO $ updateFactor code prDate newFactor
-          put newFactor
+          liftIO $ updateFactor code prDate factor -- recordDay still use old factor
+          put newFactor -- next day of recordDay use new factor
         False -> do
           rcClose <- liftIO $ getClose code prDate
           allotRatio <- liftIO $ getAllotRatio code prDate
@@ -699,8 +726,8 @@ stateFactor code prDate rcDl = do
           let rcPrice = (fromIntegral @_ @Float rcClose  +  1000 * fromIntegral @_ @Float offerPrice * fromIntegral @_ @Float allotRatio/10) / (1 + fromIntegral @_ @Float allotRatio/10 )
           let currentFactor = fromIntegral @_ @Float rcClose / rcPrice
           let newFactor =  floor $ fromIntegral @_ @Float factor * currentFactor
-          liftIO $ updateFactor code prDate newFactor
-          put newFactor
+          liftIO $ updateFactor code prDate factor  -- recordDay still use old factor
+          put newFactor -- next day of recordDay use new factor
 
     False -> do
       liftIO $ updateFactor code prDate factor
