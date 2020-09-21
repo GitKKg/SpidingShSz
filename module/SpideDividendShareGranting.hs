@@ -246,7 +246,7 @@ onePageRight mlist mp howManyPort code = do
             --traceM $ "now onepageDataA name is " ++ (T.unpack .decodeUtf8.L8.toStrict)  name
             --test <- seekNext $ text "td"
             --traceM $ L8.unpack test
-            traceM "hi!exception for 600002"
+            -- traceM "hi!exception for 600002"
             --test <-seekNext $ text "td"
             --traceM $ "text is " ++ (show . T.unpack .decodeUtf8.L8.toStrict) test
             -- many stocks A table is just empty,so must take care,using guard to exit in case

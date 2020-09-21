@@ -523,9 +523,10 @@ getPrDateL code = do
   withPostgreSQL @IO  pgConnectInfo $ do
     tryCreateTable stockPriceT
     query $ do
-      dl <- #_date `from` select stockPriceT
-      order dl ascending
-      return dl
+      stockL <- select stockPriceT
+      restrict (stockL ! #_code .== literal (pack code))
+      order (stockL ! #_date) ascending
+      return $ stockL ! #_date
 
 
 -- for ordered lists ,merge sorts
@@ -567,7 +568,7 @@ instance Ord RcDate where
 getCodes = getStockCodes "./module/sinaCodes"
 
 -- company with checkRcDate
-getRcRightDateL :: String -> IO ([RcDate])
+getRcRightDateL :: String -> IO [RcDate]
 getRcRightDateL code = do
     bl <- getReDateLbt code
     let dbl = case isJust bl of
@@ -702,8 +703,8 @@ correctRcDate code date =
       return $ stockL ! #_date
     return $ dl !! 0
                     
-stateFactor :: String -> Int -> [RcDate] -> StateT Int IO () -- factor is Int
-stateFactor code prDate rcDl = do
+stateFactor :: String -> [RcDate] -> Int -> StateT Int IO () -- factor is Int
+stateFactor code rcDl prDate  = do
   factor <- get
   case dateElem prDate rcDl of
     True -> do
@@ -714,22 +715,79 @@ stateFactor code prDate rcDl = do
           dividend <- liftIO $ getDividend code prDate
           bonusSharesRatio <- liftIO $ getBonusSharesRatio code prDate
           sharesTranscent <- liftIO $ getSharesTranscent code prDate
-          let rcPrice = fromIntegral @_ @Float (rcClose - 100 * dividend) / (1+ fromIntegral @_ @Float bonusSharesRatio/10 + fromIntegral @_ @Float sharesTranscent/10)
+          -- all data here are in 3 digital space of accuracy but stored by *1000 in Int,so must make balance in denominator by *1000
+          let rcPrice = (fromIntegral @_ @Float rcClose - fromIntegral @_ @Float dividend /10) / (1 *1000 + fromIntegral @_ @Float bonusSharesRatio/10 + fromIntegral @_ @Float sharesTranscent/10)
           let currentFactor = fromIntegral @_ @Float rcClose / rcPrice
-          let newFactor =  floor $ fromIntegral @_ @Float factor * currentFactor
+          -- factor is in 3 digital space accuracy but stored in Int ,because here we get 2 factor multiplied to get newFactor,means we get 1000 *1000, so divide by 1000
+          let newFactor =  floor $ fromIntegral @_ @Float factor * currentFactor / 1000
           liftIO $ updateFactor code prDate factor -- recordDay still use old factor
+          traceM $ "updating newFactor in BonusRcDate, code is " ++ show code ++ ",date is " ++ show prDate
           put newFactor -- next day of recordDay use new factor
         False -> do
           rcClose <- liftIO $ getClose code prDate
           allotRatio <- liftIO $ getAllotRatio code prDate
           offerPrice <- liftIO $ getOfferPrice code prDate
-          let rcPrice = (fromIntegral @_ @Float rcClose  +  1000 * fromIntegral @_ @Float offerPrice * fromIntegral @_ @Float allotRatio/10) / (1 + fromIntegral @_ @Float allotRatio/10 )
+          -- all data here are in 3 digital space of accuracy but stored by *1000 in Int,so must make balance in denominator by *1000
+          let rcPrice = (fromIntegral @_ @Float rcClose  +  fromIntegral @_ @Float offerPrice * fromIntegral @_ @Float allotRatio/10) / (1*1000 + fromIntegral @_ @Float allotRatio/10 )
           let currentFactor = fromIntegral @_ @Float rcClose / rcPrice
-          let newFactor =  floor $ fromIntegral @_ @Float factor * currentFactor
+          -- factor is in 3 digital space accuracy but stored in Int ,because here we get 2 factor multiplied to get newFactor,means we get 1000 *1000, so divide by 1000
+          let newFactor =  floor $ fromIntegral @_ @Float factor * currentFactor / 1000
           liftIO $ updateFactor code prDate factor  -- recordDay still use old factor
+          traceM $ "updating newFactor in AllotRcDate, code is " ++ show code ++ ",date is " ++ show prDate
           put newFactor -- next day of recordDay use new factor
 
     False -> do
       liftIO $ updateFactor code prDate factor
-      return ()
-      ---return ()
+      traceM $ "updating with oldFactor, code is " ++ show code ++ ",date is " ++ show prDate
+
+
+testRcL = [RcDate BonusRcDate 20180822
+          ,RcDate BonusRcDate 20190814
+          ,RcDate BonusRcDate 20200813]
+
+-- price list must get same date coverage with Rc right list,or else get empty list error
+testStateFactor = do
+  -- now we get only data to 2017,so not use rcL,but use testRcL for test
+  rcL <- getRcRightDateL "000002" >>= checkRcDate "000002"
+  prDl <- getPrDateL "000002"
+  -- factor is in 3 digital space accuracy but stored in Int ,so initial state is multiplied 1000
+  execStateT (mapM (stateFactor "000002" testRcL) prDl) (1*1000)
+  -- finally return latest factor value
+  
+updateAllFactors :: String -> IO ()
+updateAllFactors code = do
+  rcL <- getRcRightDateL code >>= checkRcDate code
+  prDl <- getPrDateL code
+  execStateT (mapM (stateFactor code rcL) prDl) (1*1000)
+  return ()
+
+-- self.cursor.execute(
+--             'update stock set fuquan_average=average*factor/%f where code="%s" '
+--             % (self.latestFactor, self.stockCode)
+--         )
+
+getLatestFactor :: String -> IO Int
+getLatestFactor code = do
+  pgCon <- pgOpen pgConnectInfo
+  withPostgreSQL @IO pgConnectInfo $ do
+    tryCreateTable stockPriceT
+    factorL <- query $ do
+      stockL <- select stockPriceT
+      restrict (stockL ! #_code .== literal (pack code))
+      order (stockL ! #_date) descending
+      return $ stockL ! #_factor
+    return $ factorL !! 0
+  
+
+updateExPrices :: String -> IO Int
+updateExPrices code = do
+  latestFactor <- getLatestFactor code
+  withPostgreSQL @IO pgConnectInfo $ do
+    tryCreateTable stockPriceT
+    update stockPriceT (\r -> r ! #_code .== (literal . pack) code ) (\r -> r `with` [  #_fuquan_average := fromInt ( r ! #_average) * fromInt (r ! #_factor) / fromInt (literal latestFactor) ])
+
+updateFactorAndExPrices :: FilePath -> IO ()
+updateFactorAndExPrices fp = do
+  codeL <- getStockCodes fp
+  mapM_ updateAllFactors codeL
+  mapM_ updateExPrices codeL
