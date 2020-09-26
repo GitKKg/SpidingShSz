@@ -157,7 +157,9 @@ onePagePrice mlist mp howManyPort stockCode year season banQ = do
               logOutM $ "wait for 5 mins,repeat again \n"
               threadDelay $ 1000000*60*5
               onePagePrice mlist mp howManyPort stockCode year season False
-              else onePagePrice mlist mp howManyPort stockCode year season True
+              else do
+              threadDelay $ 1000000*5
+              onePagePrice mlist mp howManyPort stockCode year season True
           Right stock ->  return (endSec, stock)
   --print stockA
   --return stockA
@@ -244,7 +246,7 @@ mmps = mpb <*> mpa <*> mmplus
 -- still 3
 bmplus = (return :: a -> IO a) . (+) -- look this as onePageData
 inmmps = mpa <*> ( (return 2) >>= bmplus)
--- still 3
+-- Still 3
 -- note! $ 2 is different with ($) 2, so we can't fmap $ into functor, only can fmap ($)
 -- so ,we can't make data inside functor become passive!shame!
 -- actually,we can:
