@@ -689,11 +689,11 @@ checkRcDate code rcL = do
         -- the emergence of "where" level by level represent the thought process how you concrete the process to solve the issue step by step also level by level, naming help you anchor when you are in the middle of the thinking
         False -> do
           traceM $ "got fucking suspended in Record date! code is " ++ show code ++ ",date is " ++ show rc
-          rightDate <- correctRcDate code (_dateT rc)
+          rightDate <- correctRcDateOnline code (_dateT rc)
           return $ RcDate (_whatTab rc) rightDate
 
 -- haskell get this bug, if get where embed where, the code after last where outside of the block (here is stateFactor function below) will get indent issue, so have to put last where as global function,here is correctRcDate 
-correctRcDate code date =
+correctRcDateOnline code date =
   withPostgreSQL @IO pgConnectInfo $ do
     tryCreateTable stockPriceT
     dl <- query $ do
@@ -702,6 +702,28 @@ correctRcDate code date =
       order (stockL ! #_date) ascending
       return $ stockL ! #_date
     return $ dl !! 0
+
+correctReDateInDB :: String -> Int -> Int -> IO Int
+correctReDateInDB code date rightDate =
+  withPostgreSQL @IO pgConnectInfo $ do
+  tryCreateTable bonusInfoT
+  update bonusInfoT (\r -> r ! #_codeB .== (literal . pack) code .&&  r ! #_recordDateB .== literal date ) (\r -> r `with` [  #_recordDateB := literal rightDate ])
+
+correctRcDate :: String -> [RcDate] -> IO ()
+correctRcDate code rcL = do
+  mapM_ assureRcInPrDl rcL where
+    assureRcInPrDl rc = do
+      prDl <- getPrDateL code
+      case _dateT rc `elem` prDl of
+        True -> return ()
+        -- the emergence of "where" level by level represent the thought process how you concrete the process to solve the issue step by step also level by level, naming help you anchor when you are in the middle of the thinking
+        False -> do
+          traceM $ "got fucking suspended in Record date! code is " ++ show code ++ ",date is " ++ show rc
+          rightDate <- correctRcDateOnline code (_dateT rc)
+          correctReDateInDB code (_dateT rc) rightDate
+          return ()
+          --rightDate <- correctRcDateOnline code (_dateT rc)
+          --return $ RcDate (_whatTab rc) rightDate
                     
 stateFactor :: String -> [RcDate] -> Int -> StateT Int IO () -- factor is Int
 stateFactor code rcDl prDate  = do
@@ -750,7 +772,7 @@ testRcL = [RcDate BonusRcDate 20180822
 -- how to debug unknown exception !!
 -- *Main> :set -fbreak-on-exception
 -- *Main> :set args "DataBase.hs"
--- *Main> :trace testStateFactoro
+-- *Main> :trace testStateFactor
 -- ...
 -- Stopped in <exception thrown>, <unknown>
 -- _exception :: e = _
@@ -774,7 +796,9 @@ testStateFactor = do
   
 updateAllFactors :: String -> IO ()
 updateAllFactors code = do
-  rcL <- getRcRightDateL code >>= checkRcDate code
+  -- rcL <- getRcRightDateL code >>= checkRcDate code
+  getRcRightDateL code >>= correctRcDate code
+  rcL<-getRcRightDateL code
   prDl <- getPrDateL code
   execStateT (mapM (stateFactor code rcL) prDl) (1*1000)
   return ()
@@ -804,6 +828,7 @@ updateExPrices code = do
     tryCreateTable stockPriceT
     update stockPriceT (\r -> r ! #_code .== (literal . pack) code ) (\r -> r `with` [  #_fuquan_average := fromInt ( r ! #_average) * fromInt (r ! #_factor) / fromInt (literal latestFactor) ])
 
+-- updateFactorAndExPrices "./module/sinaCodes"
 updateFactorAndExPrices :: FilePath -> IO ()
 updateFactorAndExPrices fp = do
   codeL <- getStockCodes fp
