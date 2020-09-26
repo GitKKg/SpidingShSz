@@ -746,12 +746,30 @@ testRcL = [RcDate BonusRcDate 20180822
           ,RcDate BonusRcDate 20200813]
 
 -- price list must get same date coverage with Rc right list,or else get empty list error
+-- online update rcl make head empty list exception when getDividend,because rc date is correctified online,but when getDividend,rc date is still got from database,which is not correctified
+-- how to debug unknown exception !!
+-- *Main> :set -fbreak-on-exception
+-- *Main> :set args "DataBase.hs"
+-- *Main> :trace testStateFactoro
+-- ...
+-- Stopped in <exception thrown>, <unknown>
+-- _exception :: e = _
+--  [<unknown>] lambda :back
+-- Logged breakpoint at /home/kyle/Haskell/SpidingShSz/module/DataBase.hs:719:59-89
+-- _result :: Float
+-- dividend :: Int
+-- [-1: /home/kyle/Haskell/SpidingShSz/module/DataBase.hs:719:59-89] lambda :list
+-- 718            -- all data here are in 3 digital space of accuracy but stored by *1000 in Int,so must make balance in denominator by *1000
+-- 719            let rcPrice = (fromIntegral @_ @Float rcClose - fromIntegral @_ @Float dividend /10) / (1 *1000 + fromIntegral @_ @Float bonusSharesRatio/10 + fromIntegral @_ @Float sharesTranscent/10)
+--                                                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+-- 720            let currentFactor = fromIntegral @_ @Float rcClose / rcPrice
+
 testStateFactor = do
   -- now we get only data to 2017,so not use rcL,but use testRcL for test
-  rcL <- getRcRightDateL "000002" >>= checkRcDate "000002"
-  prDl <- getPrDateL "000002"
+  rcL <- getRcRightDateL "000001" >>= checkRcDate "000001"
+  prDl <- getPrDateL "000001"
   -- factor is in 3 digital space accuracy but stored in Int ,so initial state is multiplied 1000
-  execStateT (mapM (stateFactor "000002" testRcL) prDl) (1*1000)
+  execStateT (mapM (stateFactor "000001" rcL) prDl) (1*1000)
   -- finally return latest factor value
   
 updateAllFactors :: String -> IO ()
