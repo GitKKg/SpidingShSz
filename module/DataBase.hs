@@ -45,6 +45,9 @@ import qualified Data.Set as DS
 import Control.Monad.State
 import Control.Monad.State.Lazy
 
+import Control.Concurrent
+import DebugLogM
+
 data Stock = Stock  -- the field member name must be exact same with field of table in database which already exist
 -- order no matter, just parts no matter, only name and type matter
   {
@@ -673,7 +676,7 @@ getAllotRatio code date =
 
 updateFactor :: String -> Int -> Int -> IO Int
 updateFactor code date factor =
-  withPostgreSQL @IO pgConnectInfo $ do
+  withPostgreSQL @IO pgConnectInfo  $ do
   tryCreateTable stockPriceT
   update stockPriceT (\r -> r ! #_code .== (literal . pack) code .&&  r ! #_date .== literal date ) (\r -> r `with` [  #_factor := literal factor ])
 
@@ -743,7 +746,7 @@ stateFactor code rcDl prDate  = do
           -- factor is in 3 digital space accuracy but stored in Int ,because here we get 2 factor multiplied to get newFactor,means we get 1000 *1000, so divide by 1000
           let newFactor =  floor $ fromIntegral @_ @Float factor * currentFactor / 1000
           liftIO $ updateFactor code prDate factor -- recordDay still use old factor
-          traceM $ "updating newFactor in BonusRcDate, code is " ++ show code ++ ",date is " ++ show prDate
+          --traceM $ "updating newFactor in BonusRcDate, code is " ++ show code ++ ",date is " ++ show prDate
           put newFactor -- next day of recordDay use new factor
         False -> do
           rcClose <- liftIO $ getClose code prDate
@@ -755,12 +758,13 @@ stateFactor code rcDl prDate  = do
           -- factor is in 3 digital space accuracy but stored in Int ,because here we get 2 factor multiplied to get newFactor,means we get 1000 *1000, so divide by 1000
           let newFactor =  floor $ fromIntegral @_ @Float factor * currentFactor / 1000
           liftIO $ updateFactor code prDate factor  -- recordDay still use old factor
-          traceM $ "updating newFactor in AllotRcDate, code is " ++ show code ++ ",date is " ++ show prDate
+          --traceM $ "updating newFactor in AllotRcDate, code is " ++ show code ++ ",date is " ++ show prDate
           put newFactor -- next day of recordDay use new factor
 
     False -> do
       liftIO $ updateFactor code prDate factor
-      traceM $ "updating with oldFactor, code is " ++ show code ++ ",date is " ++ show prDate
+      return ()
+      --traceM $ "updating with oldFactor, code is " ++ show code ++ ",date is " ++ show prDate
 
 
 testRcL = [RcDate BonusRcDate 20180822
@@ -828,9 +832,58 @@ updateExPrices code = do
     tryCreateTable stockPriceT
     update stockPriceT (\r -> r ! #_code .== (literal . pack) code ) (\r -> r `with` [  #_fuquan_average := fromInt ( r ! #_average) * fromInt (r ! #_factor) / fromInt (literal latestFactor) ])
 
+logOutD log = (>>) <$> liftIO . (appendFile log) <*> traceM
 -- updateFactorAndExPrices "./module/sinaCodes"
 updateFactorAndExPrices :: FilePath -> IO ()
 updateFactorAndExPrices fp = do
+  let threadList = [1..30]
   codeL <- getStockCodes fp
-  mapM_ updateAllFactors codeL
-  mapM_ updateExPrices codeL
+  mCodeL <- newMVar codeL -- ["603955"] --codeL
+  syncM <- newEmptyMVar
+  --mapM_ updateAllFactors codeL
+  --mapM_ updateExPrices codeL
+  mapM (forkIO . threadUpdateFactor syncM mCodeL) threadList
+  mapM_ (\_ -> takeMVar syncM)  threadList
+
+  --mapM (forkIO . threadUpdateUpdateExPrice syncM mCodeL) threadList
+  --mapM_ (\_ -> takeMVar syncM)  threadList
+
+  --takeMVar syncM
+  --takeMVar syncM
+  traceM "finished!"
+  return ()
+
+threadUpdateFactor syncM  mCodeL thread = do
+  --updateAllFactors codeL
+  id <- myThreadId
+  --let log = "./log/" ++ ((!! 1) . (DL.words) . show) id ++ "log.txt"
+  codeL <- takeMVar mCodeL
+  case (DL.null) codeL of
+    True -> do
+      traceM $ show id ++  " out for codeL is empty \n"
+      putMVar mCodeL codeL
+      putMVar syncM 'x'
+    False -> do
+      let code = DL.head codeL
+      traceM $ show id ++  " updateAllFactors of " ++ show code ++ "\n"
+      putMVar mCodeL (DL.tail $ codeL)
+      updateAllFactors code
+      threadUpdateFactor syncM  mCodeL thread
+
+threadUpdateUpdateExPrice syncM  mCodeL thread = do
+  --updateAllFactors codeL
+  id <- myThreadId
+  --let log = "./log/" ++ ((!! 1) . (DL.words) . show) id ++ "log.txt"
+  codeL <- takeMVar mCodeL
+  case (DL.null) codeL of
+    True -> do
+      traceM $ show id ++  " out for codeL is empty \n"
+      putMVar mCodeL codeL
+      putMVar syncM 'x'
+    False -> do
+      let code = DL.head codeL
+      traceM $ show id ++  " threadUpdateUpdateExPrice of " ++ show code ++ "\n"
+      putMVar mCodeL (DL.tail $ codeL)
+      updateExPrices code
+      threadUpdateUpdateExPrice syncM  mCodeL thread
+      
