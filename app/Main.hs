@@ -221,7 +221,7 @@ main = do
   syncDP <- newEmptyMVar -- for main wait for Direct link thread of Pricing
   syncDab <- newEmptyMVar -- for main wait for Direct link thread of AB
   let threadList = portList
-  mapM (forkIO . threadWorkP 0 syncP syncDP mlistP  threadList False) threadList
+  
   --mapM (forkIO . evalStateT .threadWorkT  syncM mlist ) threadList
 
   -- Bonus and Allotment Spiding
@@ -235,6 +235,9 @@ main = do
   takeMVar syncDab
 
   print "Bonus and Allotment right info spiding are over! \n"
+
+  -- since adding updating Factors and exPrices in runtime when only necessary ,so price spiding must waiting ExRight info spiding 
+  mapM (forkIO . threadWorkP 0 syncP syncDP mlistP  threadList False) threadList
   
   -- mapM (\_ -> takeMVar syncP) threadList
   takeMVar syncDP
@@ -289,17 +292,46 @@ main = do
             logOutM $ "exception when onePagePrice! is \n" ++ show e ++ "\n it seems proxy thread demand out!\n"
             putMVar syncM 'x'
           Right info -> do
-            let (endSec ,stockL) = info
+            -- not update endSec here anymore,now add updating Factors and ExPrices counting
+            let (_ ,stockL) = info
+            
             --endT <- getTime Monotonic
             -- let endSec = round . (/ (10^9) ) . fromInteger . toNanoSecs $ endT
-            logOut log $ "end time is " ++ show endSec ++ "s\n"
+            -- logOut log $ "end time is " ++ show endSec ++ "s\n"
             -- some stock just exit market or not go in public in that time range,so stockL maybe null
             -- for example, 000022,when 2019 exit market
             when (not . null $ stockL) $ saveStockPrice (show id) stockL
+
+            -- update Factors and ExPrices only when necessary in runtime,make use of anti-ban time wait,to save time cost greatly!
+            when (not . null $ stockL) $ do
+              getRcRightDateL code >>= correctRcDate code
+              rcL <- getRcRightDateL code
+              prDl <- getPrDateL code
+              let currentSeason1Day = seasonTo1stDate year season
+              let updatingPrDL = filter (\date -> date >= currentSeason1Day) prDl
+              -- actually no need,just save some time
+              let updatingRcL = filter (\rcL -> _dateT rcL >= currentSeason1Day) rcL
+              
+              latestBonusRe <- getLatestBonusRe code
+              latestAllotRe <- getLatestAllotRe code
+              currenSeason1DayFactor <- getFactor code currentSeason1Day
+              execStateT (mapM (stateFactor code updatingRcL) updatingPrDL) currenSeason1DayFactor
+              case latestBonusRe >= currentSeason1Day || latestAllotRe >= currentSeason1Day of
+                True -> updateExPrices code
+                False -> updateExPricesFromDate code currentSeason1Day
+              return ()
+            --case currenSeason1Day 
+
             --end <- getTime Monotonic
             --let duration = fromIntegral (toNanoSecs end - toNanoSecs start) / 10 ^9
             --when (duration < 6) $ threadDelay $ round (6-duration) * 10 ^6 -- wait for at least 6 second to avoid ban
+            endT <- getTime Monotonic
+            let endSec = round . (/ (10^9) ) . fromInteger . toNanoSecs $ endT
+            logOut log $ "end time is " ++ show endSec ++ "s\n"
             threadWorkP endSec syncM syncD mlist threadList allOut mayPort
+
+    seasonTo1stDate :: Int -> Int -> Int
+    seasonTo1stDate year season = year * 10000 + (season - 1) * 3 +1 
         
     threadWorkAB lastSec syncM syncD mlist threadList allOut mayPort = do -- evalStateT
       id <- myThreadId

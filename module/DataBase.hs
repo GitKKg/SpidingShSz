@@ -16,7 +16,17 @@ module DataBase (
     getStockCodes,
     saveStockPrice,
     saveBonusInfo,
-    saveAllotmentInfo
+    saveAllotmentInfo,
+    stateFactor,
+    getRcRightDateL,
+    correctRcDate,
+    getLatestBonusRe,
+    getLatestAllotRe,
+    getPrDateL,
+    getFactor,
+    updateExPrices,
+    updateExPricesFromDate,
+    RcDate(..)
 ) where
 import Data.Maybe
 import Data.String
@@ -583,6 +593,7 @@ getRcRightDateL code = do
           False ->  []
     -- return . DL.filter (\x -> _dateT x /= 0) $ merge  dal dbl
     -- only care 2006 07 01 after
+    -- and some stock get announceDate but recordDate is 0, it could be filtered to be removed too
     return . DL.filter (\x -> _dateT x >= 20060701) $ merge  dal dbl
     
 
@@ -674,6 +685,16 @@ getAllotRatio code date =
     restrict ( stockL ! #_codeA .== (literal . pack) code .&& stockL ! #_recordDateA .== literal date)
     return $ stockL ! #_allotRatio
 
+getFactor :: String -> Int -> IO Int
+getFactor code date =
+  fmap DL.head $ withPostgreSQL @IO pgConnectInfo $ do
+  tryCreateTable stockPriceT
+  query $ do
+    stockL <- select stockPriceT
+    restrict ( stockL ! #_code .== (literal . pack) code .&& stockL ! #_date .>= literal date)
+    order (stockL ! #_date) ascending
+    return $ stockL ! #_factor
+
 updateFactor :: String -> Int -> Int -> IO Int
 updateFactor code date factor =
   withPostgreSQL @IO pgConnectInfo  $ do
@@ -706,11 +727,17 @@ correctRcDateOnline code date =
       return $ stockL ! #_date
     return $ dl !! 0
 
-correctReDateInDB :: String -> Int -> Int -> IO Int
-correctReDateInDB code date rightDate =
+correctReDateInBonusDB :: String -> Int -> Int -> IO Int
+correctReDateInBonusDB code date rightDate =
   withPostgreSQL @IO pgConnectInfo $ do
   tryCreateTable bonusInfoT
   update bonusInfoT (\r -> r ! #_codeB .== (literal . pack) code .&&  r ! #_recordDateB .== literal date ) (\r -> r `with` [  #_recordDateB := literal rightDate ])
+
+correctReDateInAlloctmentDB :: String -> Int -> Int -> IO Int
+correctReDateInAlloctmentDB code date rightDate =
+  withPostgreSQL @IO pgConnectInfo $ do
+  tryCreateTable allotmentT
+  update allotmentT (\r -> r ! #_codeA .== (literal . pack) code .&&  r ! #_recordDateA .== literal date ) (\r -> r `with` [  #_recordDateA := literal rightDate ])
 
 correctRcDate :: String -> [RcDate] -> IO ()
 correctRcDate code rcL = do
@@ -720,13 +747,20 @@ correctRcDate code rcL = do
       case _dateT rc `elem` prDl of
         True -> return ()
         -- the emergence of "where" level by level represent the thought process how you concrete the process to solve the issue step by step also level by level, naming help you anchor when you are in the middle of the thinking
-        False -> do
-          traceM $ "got fucking suspended in Record date! code is " ++ show code ++ ",date is " ++ show rc
-          rightDate <- correctRcDateOnline code (_dateT rc)
-          correctReDateInDB code (_dateT rc) rightDate
-          return ()
+        False -> case _whatTab rc of
+          BonusRcDate -> do
+            traceM $ "got fucking suspended in Record date of BonusRcDate! code is " ++ show code ++ ",date is " ++ show rc
+            rightDate <- correctRcDateOnline code (_dateT rc)
+            correctReDateInBonusDB code (_dateT rc) rightDate
+            return ()
           --rightDate <- correctRcDateOnline code (_dateT rc)
           --return $ RcDate (_whatTab rc) rightDate
+          AllotRcDate -> do
+            traceM $ "got fucking suspended in Record date of AllotRcDate! code is " ++ show code ++ ",date is " ++ show rc
+            rightDate <- correctRcDateOnline code (_dateT rc)
+            correctReDateInAlloctmentDB code (_dateT rc) rightDate
+            return ()
+            
                     
 stateFactor :: String -> [RcDate] -> Int -> StateT Int IO () -- factor is Int
 stateFactor code rcDl prDate  = do
@@ -823,6 +857,30 @@ getLatestFactor code = do
       order (stockL ! #_date) descending
       return $ stockL ! #_factor
     return $ factorL !! 0
+
+getLatestBonusRe :: String -> IO Int
+getLatestBonusRe code = do
+  pgCon <- pgOpen pgConnectInfo
+  withPostgreSQL @IO pgConnectInfo $ do
+    tryCreateTable bonusInfoT
+    factorL <- query $ do
+      stockL <- select bonusInfoT
+      restrict (stockL ! #_codeB .== literal (pack code))
+      order (stockL ! #_recordDateB) descending
+      return $ stockL ! #_recordDateB
+    return $ factorL !! 0
+
+getLatestAllotRe :: String -> IO Int
+getLatestAllotRe code = do
+  pgCon <- pgOpen pgConnectInfo
+  withPostgreSQL @IO pgConnectInfo $ do
+    tryCreateTable allotmentT
+    factorL <- query $ do
+      stockL <- select allotmentT
+      restrict (stockL ! #_codeA .== literal (pack code))
+      order (stockL ! #_recordDateA) descending
+      return $ stockL ! #_recordDateA
+    return $ factorL !! 0
   
 
 updateExPrices :: String -> IO Int
@@ -831,6 +889,14 @@ updateExPrices code = do
   withPostgreSQL @IO pgConnectInfo $ do
     tryCreateTable stockPriceT
     update stockPriceT (\r -> r ! #_code .== (literal . pack) code ) (\r -> r `with` [  #_fuquan_average := fromInt ( r ! #_average) * fromInt (r ! #_factor) / fromInt (literal latestFactor) ])
+
+-- date is 1st day of latest season of prices table
+updateExPricesFromDate :: String -> Int -> IO Int
+updateExPricesFromDate code date = do
+  latestFactor <- getLatestFactor code
+  withPostgreSQL @IO pgConnectInfo $ do
+    tryCreateTable stockPriceT
+    update stockPriceT (\r -> r ! #_code .== (literal . pack) code .&& r ! #_date .>= literal date ) (\r -> r `with` [  #_fuquan_average := fromInt ( r ! #_average) * fromInt (r ! #_factor) / fromInt (literal latestFactor) ])
 
 logOutD log = (>>) <$> liftIO . (appendFile log) <*> traceM
 -- updateFactorAndExPrices "./module/sinaCodes"
@@ -853,6 +919,7 @@ updateFactorAndExPrices fp = do
   traceM "finished!"
   return ()
 
+-- forced to update global all dates Factor
 threadUpdateFactor syncM  mCodeL thread = do
   --updateAllFactors codeL
   id <- myThreadId
@@ -870,6 +937,7 @@ threadUpdateFactor syncM  mCodeL thread = do
       updateAllFactors code
       threadUpdateFactor syncM  mCodeL thread
 
+-- forced to update global all dates ExPrice
 threadUpdateUpdateExPrice syncM  mCodeL thread = do
   --updateAllFactors codeL
   id <- myThreadId
@@ -882,8 +950,8 @@ threadUpdateUpdateExPrice syncM  mCodeL thread = do
       putMVar syncM 'x'
     False -> do
       let code = DL.head codeL
-      traceM $ show id ++  " threadUpdateUpdateExPrice of " ++ show code ++ "\n"
       putMVar mCodeL (DL.tail $ codeL)
+      traceM $ show id ++  " threadUpdateUpdateExPrice of " ++ show code ++ "\n"
       updateExPrices code
       threadUpdateUpdateExPrice syncM  mCodeL thread
       
