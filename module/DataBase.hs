@@ -557,8 +557,12 @@ updateAverage = do
     tryCreateTable stockPriceT
     --codeL <- query $ do
     --  _code `from` select stockPriceT
-    update stockPriceT (const $ literal True)
+    --update stockPriceT (const $ literal True)
+    -- some data just get fucking value or share as 0,have to set it as close
+    update stockPriceT (\r -> r ! #_shares ./= literal 0 .&& r ! #_value ./= literal 0)
       (\r -> r `with` [ #_average :=   (r ! #_value) * 100000 /  (r ! #_shares)  ] )
+    update stockPriceT (\r -> r ! #_shares .== literal 0 .|| r ! #_value .== literal 0)
+      (\r -> r `with` [ #_average :=  r ! #_close  ] )
       -- value in in 10 thousnad RMB Yuan
       -- shares in 100, one hand stock, so 10000/100 = 100
       -- mul to more 1000 to get 3 decimal digital space
@@ -780,25 +784,25 @@ stateFactor code rcDl prDate  = do
           -- factor is in 3 digital space accuracy but stored in Int ,because here we get 2 factor multiplied to get newFactor,means we get 1000 *1000, so divide by 1000
           let newFactor =  floor $ fromIntegral @_ @Float factor * currentFactor / 1000
           liftIO $ updateFactor code prDate factor -- recordDay still use old factor
-          --traceM $ "updating newFactor in BonusRcDate, code is " ++ show code ++ ",date is " ++ show prDate
+          --traceM $ "updating newFactor in BonusRcDate, code is " ++ show code ++ ",date is " ++ show prDate ++ ",factor is " ++ show factor
           put newFactor -- next day of recordDay use new factor
         False -> do
           rcClose <- liftIO $ getClose code prDate
           allotRatio <- liftIO $ getAllotRatio code prDate
           offerPrice <- liftIO $ getOfferPrice code prDate
           -- all data here are in 3 digital space of accuracy but stored by *1000 in Int,so must make balance in denominator by *1000
-          let rcPrice = (fromIntegral @_ @Float rcClose  +  fromIntegral @_ @Float offerPrice * fromIntegral @_ @Float allotRatio/10) / (1*1000 + fromIntegral @_ @Float allotRatio/10 )
+          let rcPrice = (fromIntegral @_ @Float rcClose  +  fromIntegral @_ @Float offerPrice * fromIntegral @_ @Float allotRatio/10/1000) / (1*1000 + fromIntegral @_ @Float allotRatio/10 )
           let currentFactor = fromIntegral @_ @Float rcClose / rcPrice
           -- factor is in 3 digital space accuracy but stored in Int ,because here we get 2 factor multiplied to get newFactor,means we get 1000 *1000, so divide by 1000
           let newFactor =  floor $ fromIntegral @_ @Float factor * currentFactor / 1000
           liftIO $ updateFactor code prDate factor  -- recordDay still use old factor
-          --traceM $ "updating newFactor in AllotRcDate, code is " ++ show code ++ ",date is " ++ show prDate
+          --traceM $ "updating newFactor in AllotRcDate, code is " ++ show code ++ ",date is " ++ show prDate ++ ",factor is " ++ show factor
           put newFactor -- next day of recordDay use new factor
 
     False -> do
       liftIO $ updateFactor code prDate factor
       return ()
-      --traceM $ "updating with oldFactor, code is " ++ show code ++ ",date is " ++ show prDate
+      --traceM $ "updating with oldFactor, code is " ++ show code ++ ",date is " ++ show prDate ++ ",factor is " ++ show factor
 
 
 testRcL = [RcDate BonusRcDate 20180822
@@ -888,7 +892,7 @@ updateExPrices code = do
   latestFactor <- getLatestFactor code
   withPostgreSQL @IO pgConnectInfo $ do
     tryCreateTable stockPriceT
-    update stockPriceT (\r -> r ! #_code .== (literal . pack) code ) (\r -> r `with` [  #_fuquan_average := fromInt ( r ! #_average) * fromInt (r ! #_factor) / fromInt (literal latestFactor) ])
+    update stockPriceT (\r -> r ! #_code .== (literal . pack) code ) (\r -> r `with` [  #_fuquan_average := fromInt ( r ! #_average) * fromInt (r ! #_factor) / fromInt (literal latestFactor)/1000 ])
 
 -- date is 1st day of latest season of prices table
 updateExPricesFromDate :: String -> Int -> IO Int
@@ -896,23 +900,24 @@ updateExPricesFromDate code date = do
   latestFactor <- getLatestFactor code
   withPostgreSQL @IO pgConnectInfo $ do
     tryCreateTable stockPriceT
-    update stockPriceT (\r -> r ! #_code .== (literal . pack) code .&& r ! #_date .>= literal date ) (\r -> r `with` [  #_fuquan_average := fromInt ( r ! #_average) * fromInt (r ! #_factor) / fromInt (literal latestFactor) ])
+    update stockPriceT (\r -> r ! #_code .== (literal . pack) code .&& r ! #_date .>= literal date ) (\r -> r `with` [  #_fuquan_average := fromInt ( r ! #_average) * fromInt (r ! #_factor) / fromInt (literal latestFactor) /1000])
 
 logOutD log = (>>) <$> liftIO . (appendFile log) <*> traceM
 -- updateFactorAndExPrices "./module/sinaCodes"
 updateFactorAndExPrices :: FilePath -> IO ()
 updateFactorAndExPrices fp = do
-  let threadList = [1..30]
+  let threadList = [1..10]
   codeL <- getStockCodes fp
   mCodeL <- newMVar codeL -- ["603955"] --codeL
   syncM <- newEmptyMVar
+  syncM2 <- newEmptyMVar
   --mapM_ updateAllFactors codeL
   --mapM_ updateExPrices codeL
   mapM (forkIO . threadUpdateFactor syncM mCodeL) threadList
   mapM_ (\_ -> takeMVar syncM)  threadList
 
-  --mapM (forkIO . threadUpdateUpdateExPrice syncM mCodeL) threadList
-  --mapM_ (\_ -> takeMVar syncM)  threadList
+  mapM (forkIO . threadUpdateUpdateExPrice syncM2 mCodeL) threadList
+  mapM_ (\_ -> takeMVar syncM2)  threadList
 
   --takeMVar syncM
   --takeMVar syncM

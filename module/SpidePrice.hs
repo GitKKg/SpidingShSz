@@ -200,8 +200,13 @@ onePagePrice mlist mp howManyPort stockCode year season banQ = do
                 _shares = shares,
                 -- value in in 10 thousnad RMB Yuan
                 -- shares in 100, one hand stock, so 10000/100 = 100
-                -- mul to more 1000 to get 3 decimal digital space 
-                _average = (floor :: Float -> Int) $  (fromIntegral ( 100000 * value)) / (fromIntegral shares),
+                -- mul to more 1000 to get 3 decimal digital space
+                -- some data just get fucking value or share as 0,have to set it as close
+                _average =
+                if shares /= 0 && value /=0
+                then
+                  (floor :: Float -> Int) $  (fromIntegral ( 100000 * value)) / (fromIntegral shares)
+                else close,
                 _open = open,
                 _high = high,
                 _close = close,
