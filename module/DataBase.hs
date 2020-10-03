@@ -872,7 +872,8 @@ getLatestBonusRe code = do
       restrict (stockL ! #_codeB .== literal (pack code))
       order (stockL ! #_recordDateB) descending
       return $ stockL ! #_recordDateB
-    return $ factorL !! 0
+    -- sometimes the stock just have not bonus or allotment already
+    if DL.null factorL then return 0 else return $ factorL !! 0
 
 getLatestAllotRe :: String -> IO Int
 getLatestAllotRe code = do
@@ -884,7 +885,8 @@ getLatestAllotRe code = do
       restrict (stockL ! #_codeA .== literal (pack code))
       order (stockL ! #_recordDateA) descending
       return $ stockL ! #_recordDateA
-    return $ factorL !! 0
+    -- sometimes the stock just have not bonus or allotment already
+    if DL.null factorL then return 0 else return $ factorL !! 0
   
 
 updateExPrices :: String -> IO Int
