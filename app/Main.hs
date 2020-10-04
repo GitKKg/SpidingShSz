@@ -161,6 +161,7 @@ getCYSList :: FilePath -> StartYear -> StartSeason -> EndYear -> EndSeason ->IO 
 getCYSList fp sy ss ey es =  do
   ysList <- getYSList sy ss ey es
   cList <- getStockCodes fp
+  --let   cList = ["002644"]
   let codeList ys =  fmap (oneCYS ys) cList
   return . join $ fmap codeList ysList
   where

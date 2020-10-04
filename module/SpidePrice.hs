@@ -158,7 +158,8 @@ onePagePrice mlist mp howManyPort stockCode year season banQ = do
               threadDelay $ 1000000*60*5
               onePagePrice mlist mp howManyPort stockCode year season False
               else do
-              threadDelay $ 1000000*5
+              threadDelay $ 1000000*15
+              logOutM $ "wait for 15s for 1st exception when parsing,repeat again \n"
               onePagePrice mlist mp howManyPort stockCode year season True
           Right stock ->  return (endSec, stock)
   --print stockA
