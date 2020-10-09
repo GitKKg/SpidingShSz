@@ -26,7 +26,10 @@ module DataBase (
     getFactor,
     updateExPrices,
     updateExPricesFromDate,
-    RcDate(..)
+    RcDate(..),
+    getCurrentDate,
+    updateCodeDate,
+    getLDdate
 ) where
 import Data.Maybe
 import Data.String
@@ -57,6 +60,20 @@ import Control.Monad.State.Lazy
 
 import Control.Concurrent
 import DebugLogM
+
+import Data.Time.Clock
+import Data.Time.Calendar
+import Data.Tuple.Extra
+
+data LatestDate = LD
+  {
+    _codeLD :: Text,
+    _dateLD :: Int
+  } deriving (Generic)
+
+instance SqlRow LatestDate
+
+defaultLDdate = LD "" 0
 
 data Stock = Stock  -- the field member name must be exact same with field of table in database which already exist
 -- order no matter, just parts no matter, only name and type matter
@@ -150,6 +167,45 @@ data Person = Person
   , pet :: Maybe Pet
   } deriving (Generic,Show)
 instance SqlRow Person
+
+-- one producer feeds 3 consumers,and finally 3 consumers produce one output together  
+getCurrentDate :: IO Int
+getCurrentDate = do
+  date <-getCurrentTime >>= return . toGregorian . utctDay
+  return $ (\a b c -> a * 10000 + b * 100 + c) <$> fromIntegral @_ @Int . fst3 <*> snd3 <*> thd3 $ date
+
+ldDateT :: Table LatestDate
+ldDateT = table "latestDate" [#_codeLD :+ #_dateLD :- unique]
+
+-- updateAllDate "./module/sinaCodes"
+updateAllDate :: FilePath -> IO Int
+updateAllDate fp = do
+  codeL <- getStockCodes fp
+  currentDate <- getCurrentDate
+  let ldList = (\code -> LD {_codeLD = pack code, _dateLD = currentDate }) <$> codeL
+  withPostgreSQL @IO  pgConnectInfo $ do
+    tryCreateTable ldDateT
+    update ldDateT (const $ literal True) (\r -> r `with` [#_dateLD := literal currentDate ])
+    boolL <- mapM ((tryInsert ldDateT) . (: []) ) ldList
+    return . DL.length . (DL.filter (\x -> x == True) ) $  boolL
+
+getLDdate :: String -> IO Int
+getLDdate code = do
+  dlLD <- withPostgreSQL @IO  pgConnectInfo $ do
+    tryCreateTable ldDateT
+    query $ do
+      ld <- select ldDateT
+      return $ ld ! #_dateLD
+  case  DL.null dlLD of
+    True -> return 0
+    False -> (return . DL.head) dlLD
+
+updateCodeDate :: String -> Int -> IO Bool
+updateCodeDate code date = do
+  withPostgreSQL @IO  pgConnectInfo $ do
+    tryCreateTable ldDateT
+    update ldDateT (\r -> r ! #_codeLD .== (literal . pack) code ) (\r -> r `with` [#_dateLD := literal date])
+    tryInsert ldDateT [LD {_codeLD = pack code, _dateLD = date}]
 
 stockPriceT :: Table Stock
 stockPriceT = table "stock" [#_code :+ #_date :- unique]

@@ -213,6 +213,8 @@ main = do
   (>>=) <$> doesDirectoryExist <*>  ((flip when) . removeDirectoryRecursive)  $ "./log"
   createDirectoryIfMissing True "./log"
 
+  currentDate <- getCurrentDate
+
   -- Price Spiding
   syncP <- newEmptyMVar
   mlistP <- newMVar cysList
@@ -230,23 +232,34 @@ main = do
   syncAB <- newEmptyMVar
   mlistAB <- newMVar codeList
 
-  mapM (forkIO . threadWorkAB 0 syncAB syncDab mlistAB threadList False) threadList
+  mapM (forkIO . threadWorkAB 0 syncAB syncDab mlistAB threadList False currentDate) threadList
 
   -- mapM_ (\_ -> takeMVar syncAB) threadList
+  
+
+  -- since adding updating Factors and exPrices in runtime when only necessary ,so price spiding must waiting ExRight info spiding 
+  mapM (forkIO . threadWorkP 0 syncP syncDP mlistP threadList False currentDate) threadList
+
   takeMVar syncDab
 
   print "Bonus and Allotment right info spiding are over! \n"
-
-  -- since adding updating Factors and exPrices in runtime when only necessary ,so price spiding must waiting ExRight info spiding 
-  mapM (forkIO . threadWorkP 0 syncP syncDP mlistP  threadList False) threadList
   
   -- mapM (\_ -> takeMVar syncP) threadList
   takeMVar syncDP
   
   print "Price spiding over,main out\n"
   where
+    checkLatestDate code currentDate = do
+      oldDate <- getLDdate code
+      if oldDate < currentDate
+        then do
+        threadDelay $ 2 * (10^6)
+        traceM $ show code ++ " LD not updated,wait for 2s\n"
+        checkLatestDate code currentDate
+        else return ()
+    
     -- just messy to use StateT here,it must pass lastSec in to onePage here,and output [stock] out from onePage then,this make StateT lost sense,since passing parameters is not avoidable,just use non-State way
-    threadWorkP lastSec syncM syncD mlist threadList allOut mayPort  = do
+    threadWorkP lastSec syncM syncD mlist threadList allOut currentDate  mayPort  = do
       id <- myThreadId
       let log = "./log/" ++ ((!! 1) . words . show) id ++ "log.txt"
       fileExist <- doesFileExist $ log
@@ -267,7 +280,7 @@ main = do
                 -- wait for all proxy threads out,except direct link
                 mapM_ (\_ -> takeMVar syncM) (tail threadList)
                 logOut log $ show id ++ " as Direclink, known all proxy threads out !\n"
-                threadWorkP lastSec syncM syncD mlist threadList True mayPort
+                threadWorkP lastSec syncM syncD mlist threadList True currentDate  mayPort
               otherwise -> do
                 logOut log $ show id ++ " as Directlink, notify main to out\n"
                 putMVar syncD 'x' -- Direclink thread out
@@ -304,6 +317,10 @@ main = do
             when (not . null $ stockL) $ saveStockPrice (show id) stockL
 
             -- update Factors and ExPrices only when necessary in runtime,make use of anti-ban time wait,to save time cost greatly!
+            
+            when (not . null $ stockL) $ do
+              checkLatestDate code currentDate
+              
             when (not . null $ stockL) $ do
               getRcRightDateL code >>= correctRcDate code
               rcL <- getRcRightDateL code
@@ -329,12 +346,13 @@ main = do
             endT <- getTime Monotonic
             let endSec = round . (/ (10^9) ) . fromInteger . toNanoSecs $ endT
             logOut log $ "end time is " ++ show endSec ++ "s\n"
-            threadWorkP endSec syncM syncD mlist threadList allOut mayPort
+            threadWorkP endSec syncM syncD mlist threadList allOut currentDate mayPort
 
     seasonTo1stDate :: Int -> Int -> Int
     seasonTo1stDate year season = year * 10000 + (season - 1) * 3 +1 
-        
-    threadWorkAB lastSec syncM syncD mlist threadList allOut mayPort = do -- evalStateT
+
+
+    threadWorkAB lastSec syncM syncD mlist threadList allOut currentDate mayPort = do -- evalStateT
       id <- myThreadId
       let log = "./log/" ++ ((!! 1) . words . show) id ++ "log.txt"
       fileExist <- doesFileExist $ log
@@ -355,7 +373,7 @@ main = do
                 -- wait for all proxy threads out,except direct link
                 mapM_ (\_ -> takeMVar syncM) (tail threadList)
                 logOut log $ show id ++ " as Direclink, known all proxy threads out!\n"
-                threadWorkAB lastSec syncM syncD mlist threadList True mayPort
+                threadWorkAB lastSec syncM syncD mlist threadList True currentDate mayPort
               otherwise -> do
                 logOut log $ show id ++ " as Directlink, notify main to out"
                 putMVar syncD 'x'
@@ -387,7 +405,9 @@ main = do
             -- for example, 000022,when 2019 exit market
             -- when (not . null $ stockL) $ saveStockPrice (show id) stockL
             when (not . null $ stockL) $ (>>) <$> (saveBonusInfo (show id) . lefts ) <*> (saveAllotmentInfo (show id) . rights ) $ stockL
+            when (not . null $ stockL) $ updateCodeDate code currentDate >> return ()
             --end <- getTime Monotonic
             --let duration = fromIntegral (toNanoSecs end - toNanoSecs start) / 10 ^9
             --when (duration < 6) $ threadDelay $ round (6-duration) * 10 ^6 -- wait for at least 6 second to avoid ban
-            threadWorkAB lastSec syncM syncD mlist threadList allOut mayPort
+            threadWorkAB lastSec syncM syncD mlist threadList allOut currentDate mayPort
+
