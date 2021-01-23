@@ -24,6 +24,7 @@ module DataBase (
     getLatestAllotRe,
     getPrDateL,
     getFactor,
+    getLatestNot0Factor,
     updateExPrices,
     updateExPricesFromDate,
     RcDate(..),
@@ -701,32 +702,34 @@ getClose code date =
     return $ stockL ! #_close
 
 getDividend :: String -> Int -> IO Int
-getDividend code date =
-  fmap DL.head $ withPostgreSQL @IO pgConnectInfo $ do
-  tryCreateTable bonusInfoT
-  query $ do
-    stockL <- select bonusInfoT
-    restrict ( stockL ! #_codeB .== (literal . pack) code .&& stockL ! #_recordDateB .== literal date)
-    return $ stockL ! #_dividend
+getDividend code date = do
+  la<- withPostgreSQL @IO pgConnectInfo $ do
+    tryCreateTable bonusInfoT
+    query $ do
+      stockL <- select bonusInfoT
+      restrict ( stockL ! #_codeB .== (literal . pack) code .&& stockL ! #_recordDateB .== literal date)
+      return $ stockL ! #_dividend
+  if DL.null la then return 0 else return $ DL.head la
 
 getBonusSharesRatio :: String -> Int -> IO Int
-getBonusSharesRatio code date =
-  fmap DL.head $ withPostgreSQL @IO pgConnectInfo $ do
-  tryCreateTable bonusInfoT
-  query $ do
-    stockL <- select bonusInfoT
-    restrict ( stockL ! #_codeB .== (literal . pack) code .&& stockL ! #_recordDateB .== literal date)
-    return $ stockL ! #_bonusSharesRatio
+getBonusSharesRatio code date = do
+  la <- withPostgreSQL @IO pgConnectInfo $ do
+    tryCreateTable bonusInfoT
+    query $ do
+      stockL <- select bonusInfoT
+      restrict ( stockL ! #_codeB .== (literal . pack) code .&& stockL ! #_recordDateB .== literal date)
+      return $ stockL ! #_bonusSharesRatio
+  if DL.null la then return 0 else return $ DL.head la
 
 getSharesTranscent :: String -> Int -> IO Int
-getSharesTranscent code date =
-  fmap DL.head $ withPostgreSQL @IO pgConnectInfo $ do
-  tryCreateTable bonusInfoT
-  query $ do
-    stockL <- select bonusInfoT
-    restrict ( stockL ! #_codeB .== (literal . pack) code .&& stockL ! #_recordDateB .== literal date)
-    return $ stockL ! #_sharesTranscent
-
+getSharesTranscent code date = do
+  la <- withPostgreSQL @IO pgConnectInfo $ do
+    tryCreateTable bonusInfoT
+    query $ do
+      stockL <- select bonusInfoT
+      restrict ( stockL ! #_codeB .== (literal . pack) code .&& stockL ! #_recordDateB .== literal date)
+      return $ stockL ! #_sharesTranscent
+  if DL.null la then return 0 else return $ DL.head la
 getOfferPrice :: String -> Int -> IO Int
 getOfferPrice code date =
   fmap DL.head $ withPostgreSQL @IO pgConnectInfo $ do
@@ -755,6 +758,30 @@ getFactor code date =
     order (stockL ! #_date) ascending
     return $ stockL ! #_factor
 
+getLatestNot0Factor :: String -> Int -> IO Int
+getLatestNot0Factor code date = do
+  fmap DL.head $ withPostgreSQL @IO pgConnectInfo $ do --even head . (/=) way will induce memory blow 
+    tryCreateTable stockPriceT
+    query $ do
+      stockL <- select stockPriceT
+      restrict ( stockL ! #_code .== (literal . pack) code .&& stockL ! #_date .< literal date)
+      order (stockL ! #_date) descending
+      return $ stockL ! #_factor
+
+-- getLatestNot0Factor :: String -> IO Int
+-- getLatestNot0Factor code = do
+--   facTab <-withPostgreSQL @IO pgConnectInfo $ do --even head . (/=) way will induce memory blow 
+--     tryCreateTable stockPriceT
+--     query $ do
+--       stockL <- select stockPriceT
+--       order (stockL ! #_date) descending
+--       return $ stockL ! #_factor
+--   return $ facTab !! (getFirstNot0 0 facTab)
+
+-- memory overflow due to lazy computation
+getFirstNot0 :: Int -> [Int] -> Int
+getFirstNot0 index la = if  la !! index  == 0 then getFirstNot0 (index +1) la else index
+
 updateFactor :: String -> Int -> Int -> IO Int
 updateFactor code date factor =
   withPostgreSQL @IO pgConnectInfo  $ do
@@ -768,7 +795,9 @@ checkRcDate code rcL = do
   mapM assureRcInPrDl rcL where
     assureRcInPrDl rc = do
       prDl <- getPrDateL code
-      case _dateT rc `elem` prDl of
+      let latestPrDate = DL.last prDl
+      case _dateT rc `elem` prDl || latestPrDate < _dateT rc of
+        -- in case of latest prices are not spided ever
         True -> return rc
         -- the emergence of "where" level by level represent the thought process how you concrete the process to solve the issue step by step also level by level, naming help you anchor when you are in the middle of the thinking
         False -> do
@@ -777,15 +806,15 @@ checkRcDate code rcL = do
           return $ RcDate (_whatTab rc) rightDate
 
 -- haskell get this bug, if get where embed where, the code after last where outside of the block (here is stateFactor function below) will get indent issue, so have to put last where as global function,here is correctRcDate 
-correctRcDateOnline code date =
-  withPostgreSQL @IO pgConnectInfo $ do
-    tryCreateTable stockPriceT
-    dl <- query $ do
-      stockL <- select stockPriceT
-      restrict $ (stockL ! #_code .== literal (pack code)) .&& (stockL ! #_date .> literal  date)
-      order (stockL ! #_date) ascending
-      return $ stockL ! #_date
-    return $ dl !! 0
+correctRcDateOnline code date = do
+   la <- withPostgreSQL @IO pgConnectInfo $ do
+     tryCreateTable stockPriceT
+     query $ do
+       stockL <- select stockPriceT
+       restrict $ (stockL ! #_code .== literal (pack code)) .&& (stockL ! #_date .> literal  date)
+       order (stockL ! #_date) ascending
+       return $ stockL ! #_date
+   if DL.null la then return 0 else return $ la !! 0
 
 correctReDateInBonusDB :: String -> Int -> Int -> IO Int
 correctReDateInBonusDB code date rightDate =
@@ -811,17 +840,33 @@ correctRcDate code rcL = do
           BonusRcDate -> do
             traceM $ "got fucking suspended in Record date of BonusRcDate! code is " ++ show code ++ ",date is " ++ show rc
             rightDate <- correctRcDateOnline code (_dateT rc)
-            correctReDateInBonusDB code (_dateT rc) rightDate
-            return ()
+            if rightDate /= 0
+              then do
+              correctReDateInBonusDB code (_dateT rc) rightDate
+              return ()
+              else -- in case of prices are not spider,but right info is newer
+              return ()
           --rightDate <- correctRcDateOnline code (_dateT rc)
           --return $ RcDate (_whatTab rc) rightDate
           AllotRcDate -> do
             traceM $ "got fucking suspended in Record date of AllotRcDate! code is " ++ show code ++ ",date is " ++ show rc
             rightDate <- correctRcDateOnline code (_dateT rc)
-            correctReDateInAlloctmentDB code (_dateT rc) rightDate
-            return ()
+            if rightDate /= 0
+              then do
+              correctReDateInAlloctmentDB code (_dateT rc) rightDate
+              return ()
+              else -- in case of prices are not spider,but right info is newer
+              return ()
             
-                    
+testAA = do
+  let code = "000995"
+  let prDate = 20060719
+  rcClose <- getClose code prDate
+  dividend <-getDividend code prDate
+  bonusSharesRatio <-  getBonusSharesRatio code prDate
+  sharesTranscent <-  getSharesTranscent code prDate
+  let rcPrice = (fromIntegral @_ @Float rcClose - fromIntegral @_ @Float dividend /10) / (1 *1000 + fromIntegral @_ @Float bonusSharesRatio/10 + fromIntegral @_ @Float sharesTranscent/10)
+  return rcPrice
 stateFactor :: String -> [RcDate] -> Int -> StateT Int IO () -- factor is Int
 stateFactor code rcDl prDate  = do
   factor <- get
@@ -831,8 +876,8 @@ stateFactor code rcDl prDate  = do
       case _whatTab (rcDl !! dIndex) == BonusRcDate of
         True -> do
           rcClose <- liftIO $ getClose code prDate
-          dividend <- liftIO $ getDividend code prDate
-          bonusSharesRatio <- liftIO $ getBonusSharesRatio code prDate
+          dividend <- liftIO $ getDividend code prDate          
+          bonusSharesRatio <- liftIO $ getBonusSharesRatio code prDate          
           sharesTranscent <- liftIO $ getSharesTranscent code prDate
           -- all data here are in 3 digital space of accuracy but stored by *1000 in Int,so must make balance in denominator by *1000
           let rcPrice = (fromIntegral @_ @Float rcClose - fromIntegral @_ @Float dividend /10) / (1 *1000 + fromIntegral @_ @Float bonusSharesRatio/10 + fromIntegral @_ @Float sharesTranscent/10)
@@ -886,10 +931,12 @@ testRcL = [RcDate BonusRcDate 20180822
 
 testStateFactor = do
   -- now we get only data to 2017,so not use rcL,but use testRcL for test
-  rcL <- getRcRightDateL "000001" >>= checkRcDate "000001"
-  prDl <- getPrDateL "000001"
+  rcL <- getRcRightDateL "002299" >>= checkRcDate "002299"
+  prDl <- getPrDateL "002299"
   -- factor is in 3 digital space accuracy but stored in Int ,so initial state is multiplied 1000
-  execStateT (mapM (stateFactor "000001" rcL) prDl) (1*1000)
+  
+  currenSeason1DayFactor <- getLatestNot0Factor "002299" 20201001
+  execStateT (mapM (stateFactor "002299" rcL) prDl) currenSeason1DayFactor 
   -- finally return latest factor value
   
 updateAllFactors :: String -> IO ()

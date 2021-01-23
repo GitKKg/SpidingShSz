@@ -194,7 +194,7 @@ grsDemo = do
 logOut log = (>>) <$> liftIO . (appendFile log) <*> traceM
 
 -- how to set args for main in GHCI
--- :set args 2018 4 2019  1 "./module/sinaCodes"
+-- :set args 2018 4 2019  1 "./module/sinaCodes" True
 --threadWorkT :: MVar Char -> MVar [(String , Int,Int)] -> Maybe PortNumber -> StateT Int IO ()
 main = do
   args <- getArgs
@@ -208,6 +208,7 @@ main = do
   traceM $ show es
   let fp = args!!4 -- "./module/sinaCodes"--read @String $ args!!4
   traceM $ fp
+  let spideRight = read @Bool $ args!!5
   cysList <- getCYSList fp sy ss ey es
   --traceShowM cysList
   (>>=) <$> doesDirectoryExist <*>  ((flip when) . removeDirectoryRecursive)  $ "./log"
@@ -232,7 +233,11 @@ main = do
   syncAB <- newEmptyMVar
   mlistAB <- newMVar codeList
 
-  mapM (forkIO . threadWorkAB 0 syncAB syncDab mlistAB threadList False currentDate) threadList
+  case spideRight of
+    True -> do
+      mapM (forkIO . threadWorkAB 0 syncAB syncDab mlistAB threadList False currentDate) threadList
+      return ()
+    False -> return ()
 
   -- mapM_ (\_ -> takeMVar syncAB) threadList
   
@@ -240,9 +245,11 @@ main = do
   -- since adding updating Factors and exPrices in runtime when only necessary ,so price spiding must waiting ExRight info spiding 
   mapM (forkIO . threadWorkP 0 syncP syncDP mlistP threadList False currentDate) threadList
 
-  takeMVar syncDab
-
-  print "Bonus and Allotment right info spiding are over! \n"
+  case spideRight of
+    True -> do
+      takeMVar syncDab
+      print "Bonus and Allotment right info spiding are over! \n"
+    False -> return ()
   
   -- mapM (\_ -> takeMVar syncP) threadList
   takeMVar syncDP
@@ -332,7 +339,10 @@ main = do
               
               latestBonusRe <- getLatestBonusRe code
               latestAllotRe <- getLatestAllotRe code
-              currenSeason1DayFactor <- getFactor code currentSeason1Day
+              tmpFactor <- getFactor code currentSeason1Day
+              currenSeason1DayFactor <- if tmpFactor == 0
+                then getLatestNot0Factor  code currentSeason1Day -- some stock just suspend over one season!
+                else return tmpFactor 
               execStateT (mapM (stateFactor code updatingRcL) updatingPrDL) currenSeason1DayFactor
               case latestBonusRe >= currentSeason1Day || latestAllotRe >= currentSeason1Day of
                 True -> updateExPrices code
@@ -396,7 +406,7 @@ main = do
         eRinfo <- try @SomeException $ onePageRight mlist mayPort (Prelude.length threadList) code
         case eRinfo of
           Left e -> do
-            logOutM $ "exception when onePagePrice! is \n" ++ show e ++ "\n it seems proxy thread demand out!\n"
+            logOutM $ "exception when onePageRight! is \n" ++ show e ++ "\n it seems proxy thread demand out!\n"
             putMVar syncM 'x'
           Right info -> do
             let (endSec,stockL) = info
