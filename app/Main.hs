@@ -233,23 +233,19 @@ main = do
   syncAB <- newEmptyMVar
   mlistAB <- newMVar codeList
 
-  case spideRight of
-    True -> do
-      mapM (forkIO . threadWorkAB 0 syncAB syncDab mlistAB threadList False currentDate) threadList
-      return ()
-    False -> return ()
-
   -- mapM_ (\_ -> takeMVar syncAB) threadList
+
+  when (spideRight == True) $ do
+    mapM (forkIO . threadWorkAB 0 syncAB syncDab mlistAB threadList False currentDate) threadList
+    takeMVar syncDab
+    print "Bonus and Allotment right info spiding are over! \n"
+    
   
 
   -- since adding updating Factors and exPrices in runtime when only necessary ,so price spiding must waiting ExRight info spiding 
   mapM (forkIO . threadWorkP 0 syncP syncDP mlistP threadList False currentDate) threadList
 
-  case spideRight of
-    True -> do
-      takeMVar syncDab
-      print "Bonus and Allotment right info spiding are over! \n"
-    False -> return ()
+  
   
   -- mapM (\_ -> takeMVar syncP) threadList
   takeMVar syncDP
@@ -288,10 +284,10 @@ main = do
                 mapM_ (\_ -> takeMVar syncM) (tail threadList)
                 logOut log $ show id ++ " as Direclink, known all proxy threads out !\n"
                 threadWorkP lastSec syncM syncD mlist threadList True currentDate  mayPort
-              otherwise -> do
+              False -> do
                 logOut log $ show id ++ " as Directlink, notify main to out\n"
                 putMVar syncD 'x' -- Direclink thread out
-          otherwise -> do
+          False -> do
             logOut log $ show id ++ " as proxy thread , is normally out ,list empty\n"
             putMVar syncM 'x' -- proxy thread out
         
@@ -384,10 +380,10 @@ main = do
                 mapM_ (\_ -> takeMVar syncM) (tail threadList)
                 logOut log $ show id ++ " as Direclink, known all proxy threads out!\n"
                 threadWorkAB lastSec syncM syncD mlist threadList True currentDate mayPort
-              otherwise -> do
+              False -> do
                 logOut log $ show id ++ " as Directlink, notify main to out"
                 putMVar syncD 'x'
-          otherwise -> do
+          False -> do
             logOut log $ show id ++ " as proxy thread , is normally out ,list empty\n"
             putMVar syncM 'x' -- proxy thread out
   
