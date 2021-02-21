@@ -760,13 +760,15 @@ getFactor code date =
 
 getLatestNot0Factor :: String -> Int -> IO Int
 getLatestNot0Factor code date = do
-  fmap DL.head $ withPostgreSQL @IO pgConnectInfo $ do --even head . (/=) way will induce memory blow 
+  la <- withPostgreSQL @IO pgConnectInfo $ do --even head . (/=) way will induce memory blow
     tryCreateTable stockPriceT
     query $ do
       stockL <- select stockPriceT
       restrict ( stockL ! #_code .== (literal . pack) code .&& stockL ! #_date .< literal date)
       order (stockL ! #_date) descending
       return $ stockL ! #_factor
+  -- for new add stock, no factor exist, must intializing as 1000
+  if DL.null la then return 1000 else return $ DL.head la
 
 -- getLatestNot0Factor :: String -> IO Int
 -- getLatestNot0Factor code = do
@@ -931,12 +933,12 @@ testRcL = [RcDate BonusRcDate 20180822
 
 testStateFactor = do
   -- now we get only data to 2017,so not use rcL,but use testRcL for test
-  rcL <- getRcRightDateL "002299" >>= checkRcDate "002299"
-  prDl <- getPrDateL "002299"
+  rcL <- getRcRightDateL "000156" >>= checkRcDate "000156"
+  prDl <- getPrDateL "000156"
   -- factor is in 3 digital space accuracy but stored in Int ,so initial state is multiplied 1000
   
-  currenSeason1DayFactor <- getLatestNot0Factor "002299" 20201001
-  execStateT (mapM (stateFactor "002299" rcL) prDl) currenSeason1DayFactor 
+  currenSeason1DayFactor <- getLatestNot0Factor "000156" 20201001
+  execStateT (mapM (stateFactor "000156" rcL) prDl) currenSeason1DayFactor 
   -- finally return latest factor value
   
 updateAllFactors :: String -> IO ()

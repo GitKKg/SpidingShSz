@@ -60,7 +60,11 @@ extra-deps:
   - unix-2.7.2.2
   - containers-0.6.0.1
   - clock-0.7.2
-  
+
+# note for debugging exception,need rebuild
+#build:
+#  library-profiling: true
+#  executable-profiling: true
 # Override default flag values for local packages and extra-deps
 # flags: {}
 

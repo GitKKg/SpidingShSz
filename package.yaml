@@ -62,6 +62,9 @@ executables:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
+# note for debugging exception,need rebuild
+#    - -fprof-auto
+#    - -fprof-cafs
     dependencies:
     - SpidingShSz
 
